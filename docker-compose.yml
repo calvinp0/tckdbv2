@@ -1,0 +1,14 @@
+
+services:
+  db:
+    image: informaticsmatters/rdkit-cartridge-debian:Release_2025_03_3
+    environment:
+      POSTGRES_USER: tckdb
+      POSTGRES_PASSWORD: tckdb
+      POSTGRES_DB: tckdb_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - tckdb_pgdata:/var/lib/postgresql/data
+volumes:
+  tckdb_pgdata:
