@@ -22,6 +22,7 @@ from app.db.models.common import CalculationQuality, CalculationType, Calculatio
 
 if TYPE_CHECKING:
     from app.db.models.species import SpeciesEntry
+    from app.db.models.geometry import Geometry
 
 
 class Calculation(Base, TimestampMixin, CreatedByMixin):
@@ -138,21 +139,19 @@ class CalculationOutputGeometry(Base):
         ForeignKey("calculation.id", deferrable=True, initially="IMMEDIATE"),
         primary_key=True,
     )
-
     geometry_id: Mapped[int] = mapped_column(
         ForeignKey("geometry.id", deferrable=True, initially="IMMEDIATE"),
         nullable=False,
     )
-
     output_order: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
 
-    role: Mapped[CalculationGeometryRole] = mapped_column(
+    role: Mapped[Optional[CalculationGeometryRole]] = mapped_column(
         SAEnum(CalculationGeometryRole, name="calc_geom_role"),
         nullable=True,
     )
 
-    calculation_outputs: Mapped[list["CalculationOutputGeometry"]] = relationship(
-        back_populates="geometry",
+    calculation: Mapped["Calculation"] = relationship(
+        back_populates="output_geometries",
     )
 
     geometry: Mapped["Geometry"] = relationship(
@@ -160,7 +159,7 @@ class CalculationOutputGeometry(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("calculation_id", "geometry_id")
+        UniqueConstraint("calculation_id", "geometry_id"),
     )
 
 

@@ -1,0 +1,47 @@
+from __future__ import annotations
+
+from typing import Optional, TYPE_CHECKING
+
+from sqlalchemy import Integer, Text, BigInteger, CHAR, ForeignKey
+from sqlalchemy.orm import relationship, mapped_column, Mapped
+
+from app.db.base import (Base,
+                         TimestampMixin)
+
+if TYPE_CHECKING:
+    from app.db.models.calculation import CalculationOutputGeometry
+
+
+class Geometry(Base, TimestampMixin):
+    __tablename__ = "geometry"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    natoms: Mapped[int] = mapped_column(Integer, nullable=False)
+    geom_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False, unique=True)
+    xyz_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    atoms: Mapped[list["GeometryAtom"]] = relationship(
+        back_populates="geometry",
+        cascade="all, delete-orphan",
+    )
+
+    calculation_outputs: Mapped[list["CalculationOutputGeometry"]] = relationship(
+        back_populates="geometry",
+    )
+
+
+class GeometryAtom(Base):
+    __tablename__ = "geometry_atom"
+
+    geometry_id: Mapped[int] = mapped_column(
+        ForeignKey("geometry.id"),
+        primary_key=True,
+    )
+
+    atom_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+    element: Mapped[str] = mapped_column(CHAR(2), nullable=False)
+    x: Mapped[float] = mapped_column(nullable=False)
+    y: Mapped[float] = mapped_column(nullable=False)
+    z: Mapped[float] = mapped_column(nullable=False)
+
+    geometry: Mapped[Geometry] = relationship(back_populates="atoms")
