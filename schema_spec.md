@@ -74,6 +74,7 @@ Constraints and notes:
 
 - a transition state is reaction-centered in this schema
 - it is not treated as a species-like global identity
+- `created_at` is `NOT NULL DEFAULT now()`
 
 ### 2.4 Geometry
 
@@ -146,6 +147,8 @@ Fields:
 
 - `id`
 - `transition_state_id`
+- `charge`
+- `multiplicity`
 - `mol`
 - `unmapped_smiles`
 - `preferred_calculation_id`
@@ -157,9 +160,11 @@ Notes:
 
 - `mol` preserves the mapped/original TS structure
 - `unmapped_smiles` is a de-mapped canonical display/search string derived from the same structure
+- `charge` and `multiplicity` are stored on the TS entry itself
 - `preferred_calculation_id` is a curated pointer to the chosen default calculation for this TS entry
 - `status` defaults to `optimized`
 - the FK to `preferred_calculation_id` is `DEFERRABLE INITIALLY DEFERRED`
+- `created_at` is `NOT NULL DEFAULT now()`
 
 ## 4. Provenance and Reference Tables
 
