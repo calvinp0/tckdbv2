@@ -457,16 +457,18 @@ CREATE TABLE "literature" (
   "kind" literature_kind NOT NULL,
   "title" text NOT NULL,
   "journal" text,
-  "year" int,
+  "year" smallint,
   "volume" text,
   "issue" text,
   "pages" text,
+  "article_number" text,
   "doi" text,
   "isbn" text,
   "url" text,
   "publisher" text,
   "institution" text,
-  "created_at" timestamp
+  "created_by" bigint,
+  "created_at" timestamp NOT NULL DEFAULT now()
 );""")
     op.execute("""
 CREATE TABLE "author" (
@@ -475,13 +477,14 @@ CREATE TABLE "author" (
   "family_name" text NOT NULL,
   "full_name" text NOT NULL,
   "orcid" char(19),
-  "created_at" timestamp
+  "created_at" timestamp NOT NULL DEFAULT now()
 );""")
     op.execute("""
 CREATE TABLE "literature_author" (
   "literature_id" bigint NOT NULL,
   "author_id" bigint NOT NULL,
-  "author_order" int NOT NULL
+  "author_order" int NOT NULL,
+  CONSTRAINT "author_order_positive" CHECK ("author_order" > 0)
 );""")
     op.execute("""
 CREATE TABLE "workflow_tool" (
@@ -822,6 +825,10 @@ ALTER TABLE "network_species" ADD FOREIGN KEY ("network_id") REFERENCES "network
     op.execute(
         """
 ALTER TABLE "network_species" ADD FOREIGN KEY ("species_id") REFERENCES "species" ("id") DEFERRABLE INITIALLY IMMEDIATE;"""
+    )
+    op.execute(
+        """
+ALTER TABLE "literature" ADD FOREIGN KEY ("created_by") REFERENCES "app_user" ("id") DEFERRABLE INITIALLY IMMEDIATE;"""
     )
     op.execute(
         """

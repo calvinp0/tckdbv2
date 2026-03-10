@@ -227,11 +227,13 @@ Fields:
 - `volume`
 - `issue`
 - `pages`
+- `article_number`
 - `doi`
 - `isbn`
 - `url`
 - `publisher`
 - `institution`
+- `created_by`
 - `created_at`
 
 Constraints:
@@ -262,6 +264,7 @@ Constraints:
 - `author.orcid` unique
 - `literature_author(literature_id, author_order)` unique
 - `literature_author(literature_id, author_id)` unique
+- `literature_author.author_order` must be greater than zero
 
 ### 4.6 App User
 
