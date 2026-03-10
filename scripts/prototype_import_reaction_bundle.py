@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Optional
 
@@ -97,7 +96,11 @@ def get_or_create_species(cur: psycopg.Cursor, mol: Chem.Mol) -> int:
 
 
 def get_or_create_species_entry(
-    cur: psycopg.Cursor, species_id: int, mol: Chem.Mol, entry_kind: str, created_by: int
+    cur: psycopg.Cursor,
+    species_id: int,
+    mol: Chem.Mol,
+    entry_kind: str,
+    created_by: int,
 ) -> int:
     cur.execute(
         """
@@ -142,7 +145,9 @@ def get_or_create_reaction(cur: psycopg.Cursor, reaction_key: str) -> int:
     return cur.fetchone()[0]
 
 
-def get_or_create_reaction_entry(cur: psycopg.Cursor, reaction_id: int, created_by: int) -> int:
+def get_or_create_reaction_entry(
+    cur: psycopg.Cursor, reaction_id: int, created_by: int
+) -> int:
     cur.execute(
         """
         SELECT id
@@ -168,7 +173,9 @@ def get_or_create_reaction_entry(cur: psycopg.Cursor, reaction_id: int, created_
     return cur.fetchone()[0]
 
 
-def get_or_create_transition_state(cur: psycopg.Cursor, reaction_entry_id: int, label: str, created_by: int) -> int:
+def get_or_create_transition_state(
+    cur: psycopg.Cursor, reaction_entry_id: int, label: str, created_by: int
+) -> int:
     cur.execute(
         """
         SELECT id
@@ -195,7 +202,11 @@ def get_or_create_transition_state(cur: psycopg.Cursor, reaction_entry_id: int, 
 
 
 def get_or_create_transition_state_entry(
-    cur: psycopg.Cursor, transition_state_id: int, mol: Chem.Mol, status: str, created_by: int
+    cur: psycopg.Cursor,
+    transition_state_id: int,
+    mol: Chem.Mol,
+    status: str,
+    created_by: int,
 ) -> int:
     unmapped = ts_unmapped_smiles(mol)
     cur.execute(
@@ -233,7 +244,13 @@ def get_or_create_transition_state_entry(
     return cur.fetchone()[0]
 
 
-def insert_reaction_participant(cur: psycopg.Cursor, reaction_id: int, species_id: int, role: str, stoichiometry: int = 1) -> None:
+def insert_reaction_participant(
+    cur: psycopg.Cursor,
+    reaction_id: int,
+    species_id: int,
+    role: str,
+    stoichiometry: int = 1,
+) -> None:
     cur.execute(
         """
         INSERT INTO reaction_participant (reaction_id, species_id, role, stoichiometry)
@@ -258,7 +275,9 @@ def classify_species_entry_kind(record_type: str) -> str:
     raise ValueError(f"Cannot classify species_entry kind for type={record_type!r}")
 
 
-def import_bundle(records: list[Chem.Mol], conn: psycopg.Connection, created_by: int) -> None:
+def import_bundle(
+    records: list[Chem.Mol], conn: psycopg.Connection, created_by: int
+) -> None:
     reaction_name = None
     stable_species_ids: list[tuple[int, str]] = []
     ts_mol: Optional[Chem.Mol] = None
@@ -298,9 +317,15 @@ def import_bundle(records: list[Chem.Mol], conn: psycopg.Connection, created_by:
             insert_reaction_participant(cur, reaction_id, species_id, role, 1)
 
         if ts_mol is not None:
-            reaction_entry_id = get_or_create_reaction_entry(cur, reaction_id, created_by)
-            ts_id = get_or_create_transition_state(cur, reaction_entry_id, "TS0", created_by)
-            ts_entry_id = get_or_create_transition_state_entry(cur, ts_id, ts_mol, "validated", created_by)
+            reaction_entry_id = get_or_create_reaction_entry(
+                cur, reaction_id, created_by
+            )
+            ts_id = get_or_create_transition_state(
+                cur, reaction_entry_id, "TS0", created_by
+            )
+            ts_entry_id = get_or_create_transition_state_entry(
+                cur, ts_id, ts_mol, "validated", created_by
+            )
 
             cur.execute(
                 """
