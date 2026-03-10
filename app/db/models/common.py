@@ -48,6 +48,26 @@ class CalculationQuality(str, Enum):
     rejected = "rejected"
 
 
+class CalculationGeometryRole(str, Enum):
+    initial = "initial"
+    final = "final"
+    intermediate = "intermediate"
+    scan_point = "scan_point"
+    irc_forward = "irc_forward"
+    irc_reverse = "irc_reverse"
+    neb_image = "neb_image"
+
+
+class CalculationDependencyRole(str, Enum):
+    optimized_from = "optimized_from"
+    freq_on = "freq_on"
+    single_point_on = "single_point_on"
+    arkane_source = "arkane_source"
+    irc_start = "irc_start"
+    irc_followup = "irc_followup"
+    scan_parent = "scan_parent"
+    neb_parent = "neb_parent"
+
 class ArtifactKind(str, Enum):
     input = "input"
     output_log = "output_log"

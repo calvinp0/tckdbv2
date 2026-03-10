@@ -14,7 +14,7 @@ The main design choices are:
 - `species` is a stable identity object with canonical unmapped identifiers
 - `species_entry` and `transition_state_entry` are entry-level realizations that preserve submitted structure data
 - `calculation` is the provenance hub for computational work
-- typed result tables such as `calc_sp_result`, `calc_opt_result`, and `calc_freq_result` store direct job outputs
+- typed result tables such as `calc_sp_result`, `calc_opt_result`, and `calc_freq_results` store direct job outputs
 - higher-level data products such as `transport`, `thermo`, and `kinetics` reference literature, software, and workflow tools; only `thermo` and `kinetics` also carry explicit source-calculation link tables
 
 ## 2. Core Identity Tables
@@ -38,6 +38,7 @@ Constraints and notes:
 - `inchi_key` is unique
 - `smiles` is intended to be a canonical unmapped identity string
 - `charge` and `multiplicity` are part of the identity
+- `created_at` is `NOT NULL DEFAULT now()`
 
 ### 2.2 Reaction
 
@@ -116,6 +117,7 @@ Notes:
 - `mol` preserves the submitted stationary-point representation
 - `preferred_calculation_id` is a curated pointer to the chosen default calculation for this entry
 - the FK to `preferred_calculation_id` is `DEFERRABLE INITIALLY DEFERRED`
+- `created_at` is `NOT NULL DEFAULT now()`
 
 ### 3.2 Reaction Entry
 
@@ -306,6 +308,9 @@ Notes:
 - this is the main computational provenance hub
 - the owning entry is either a species entry or a TS entry, never both
 - `quality` defaults to `raw`
+- the enum type name is `calculation_quality`
+- the XOR ownership check is named `ck_calculation_exactly_one_owner`
+- `created_at` is `NOT NULL DEFAULT now()`
 
 ### 5.2 Calculation Output Geometry
 
@@ -314,17 +319,19 @@ Fields:
 - `calculation_id`
 - `geometry_id`
 - `output_order`
-- `role`
+- `role` enum: `initial`, `final`, `intermediate`, `scan_point`, `irc_forward`, `irc_reverse`, `neb_image`
 
 Constraints:
 
 - primary key on `(calculation_id, output_order)`
 - unique on `(calculation_id, geometry_id)`
+- the unique constraint is named `uq_calculation_output_geometry_calculation_id`
 
 Notes:
 
 - supports multiple geometries per calculation
 - intended for final structures, scan points, IRC outputs, NEB images, and similar cases
+- the enum type name is `calc_geom_role`
 
 ### 5.3 Calculation Dependency
 
@@ -332,7 +339,7 @@ Fields:
 
 - `parent_calculation_id`
 - `child_calculation_id`
-- `dependency_role`
+- `dependency_role` enum: `optimized_from`, `freq_on`, `single_point_on`, `arkane_source`, `irc_start`, `irc_followup`, `scan_parent`, `neb_parent`
 
 Constraints:
 
@@ -342,6 +349,7 @@ Constraints:
 Notes:
 
 - this is a lightweight provenance graph between calculations
+- the enum type name is `calc_dependency_role`
 
 ### 5.4 Direct Calculation Result Tables
 
@@ -357,11 +365,11 @@ Notes:
 - `n_steps`
 - `final_energy_hartree`
 
-`calc_freq_result`:
+`calc_freq_results`:
 
 - `calculation_id`
 - `n_imag`
-- `imag_freq_cm1`
+- `img_freq_cm1`
 - `zpe_hartree`
 
 Notes:

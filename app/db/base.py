@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 
-from sqlalchemy import DateTime, MetaData, func
+from sqlalchemy import DateTime, ForeignKey, MetaData, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # https://alembic.sqlalchemy.org/en/latest/naming.html
@@ -24,4 +25,10 @@ class TimestampMixin:
         DateTime(timezone=False),
         server_default=func.now(),
         nullable=False,
+    )
+
+
+class CreatedByMixin:
+    created_by: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("app_user.id", deferrable=True, initially="IMMEDIATE"), nullable=True
     )

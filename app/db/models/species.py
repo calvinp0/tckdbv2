@@ -15,7 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.schema import UniqueConstraint
 
-from app.db.base import Base, TimestampMixin
+from app.db.base import Base, CreatedByMixin, TimestampMixin
 from app.db.models.common import MoleculeKind, StationaryPointKind
 from app.db.types import RDKitMol
 
@@ -42,7 +42,7 @@ class Species(Base, TimestampMixin):
     __table_args__ = UniqueConstraint("inchi_key")
 
 
-class SpeciesEntry(Base, TimestampMixin):
+class SpeciesEntry(Base, TimestampMixin, CreatedByMixin):
     __tablename__ = "species_entry"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -56,10 +56,6 @@ class SpeciesEntry(Base, TimestampMixin):
     preferred_calculation_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("calculation.id", deferrable=True, initially="DEFERRED"),
         nullable=True,
-    )
-
-    created_by: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("app_user.id", deferrable=True, initially="IMMEDIATE"), nullable=True
     )
 
     species: Mapped["Species"] = relationship(back_populates="entries")

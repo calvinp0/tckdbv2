@@ -13,6 +13,11 @@ Migration details that materially affect semantics:
 
 - `transition_state_entry.status` defaults to `optimized`
 - `calculation.quality` defaults to `raw`
+- `species.created_at`, `species_entry.created_at`, and `calculation.created_at` are `NOT NULL DEFAULT now()`
+- `calculation.quality` uses the `calculation_quality` enum type
+- `calculation_output_geometry.role` uses the `calc_geom_role` enum type
+- `calculation_dependency.dependency_role` uses the `calc_dependency_role` enum type
+- the calculation XOR ownership check is named `ck_calculation_exactly_one_owner`
 - `kinetics.model_kind` defaults to `modified_arrhenius`
 - `app_user.role` defaults to `user`
 - `network_species.role` is nullable in the migration
@@ -344,6 +349,8 @@ Note:
 Note:
 
 - `quality` defaults to `raw`
+- the enum type name is `calculation_quality`
+- the XOR ownership check is named `ck_calculation_exactly_one_owner`
 
 ## 15. calculation_output_geometry
 
@@ -365,6 +372,10 @@ Note:
 
 - `role`
 
+Note:
+
+- `role` uses the `calc_geom_role` enum with values `initial`, `final`, `intermediate`, `scan_point`, `irc_forward`, `irc_reverse`, `neb_image`
+
 ## 16. calculation_dependency
 
 ### Identity
@@ -383,6 +394,10 @@ Note:
 ### Curation
 
 - `dependency_role`
+
+Note:
+
+- `dependency_role` uses the `calc_dependency_role` enum with values `optimized_from`, `freq_on`, `single_point_on`, `arkane_source`, `irc_start`, `irc_followup`, `scan_parent`, `neb_parent`
 
 ## 17. calc_sp_result
 
@@ -422,7 +437,7 @@ Note:
 
 - None
 
-## 19. calc_freq_result
+## 19. calc_freq_results
 
 ### Identity
 
@@ -431,7 +446,7 @@ Note:
 ### Result
 
 - `n_imag`
-- `imag_freq_cm1`
+- `img_freq_cm1`
 - `zpe_hartree`
 
 ### Provenance
@@ -773,6 +788,6 @@ Note:
 ## High-level observations
 
 - Identity is concentrated in `species`, `chem_reaction`, `transition_state`, `geometry`, and the bibliographic/reference tables.
-- Result values are intentionally pushed into typed result tables such as `calc_sp_result`, `calc_opt_result`, `calc_freq_result`, `thermo`, `thermo_point`, and `kinetics`.
+- Result values are intentionally pushed into typed result tables such as `calc_sp_result`, `calc_opt_result`, `calc_freq_results`, `thermo`, `thermo_point`, and `kinetics`.
 - Provenance is carried mainly through `created_by`, `created_at`, `scientific_origin`, `literature_id`, `software_id`, `workflow_tool_id`, and link tables back to `calculation`.
 - Curation currently appears as preferred pointers and qualitative status fields: `preferred_calculation_id`, `preferred_ts_entry_id`, `status`, `quality`, and role-like labeling fields in link tables.
