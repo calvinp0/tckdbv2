@@ -68,6 +68,20 @@ class CalculationDependencyRole(str, Enum):
     scan_parent = "scan_parent"
     neb_parent = "neb_parent"
 
+
+class CalculationScanKind(str, Enum):
+    torsion = "torsion"
+    bond = "bond"
+    angle = "angle"
+    multi_torsion = "multi_torsion"
+
+
+class CalculationScanCoordinateKind(str, Enum):
+    torsion = "torsion"
+    bond = "bond"
+    angle = "angle"
+
+
 class ArtifactKind(str, Enum):
     input = "input"
     output_log = "output_log"
@@ -81,6 +95,14 @@ class TransitionStateEntryStatus(str, Enum):
     optimized = "optimized"
     validated = "validated"
     rejected = "rejected"
+
+
+class ThermoModelKind(str, Enum):
+    nasa = "nasa"
+    shomate = "shomate"
+    tabulated = "tabulated"
+    statmech = "statmech"
+    experimental = "experimental"
 
 
 class ThermoCalculationRole(str, Enum):

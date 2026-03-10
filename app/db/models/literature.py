@@ -4,18 +4,20 @@ from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
     BigInteger,
-    Text,
     SmallInteger,
-    Enum as SAEnum,
     String,
+    Text,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
 )
 from sqlalchemy.orm import (
-    mapped_column,
     Mapped,
+    mapped_column,
     relationship,
 )
 
-from app.db.base import Base, TimestampMixin, CreatedByMixin
+from app.db.base import Base, CreatedByMixin, TimestampMixin
 from app.db.models.common import LiteratureKind
 
 if TYPE_CHECKING:

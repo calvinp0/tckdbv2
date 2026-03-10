@@ -2,23 +2,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import (
-    ForeignKey,
-    UniqueConstraint,
-    Integer,
-    CheckConstraint
-)
+from sqlalchemy import CheckConstraint, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import (
-    mapped_column,
     Mapped,
+    mapped_column,
     relationship,
 )
 
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.db.models.literature import Literature
     from app.db.models.author import Author
+    from app.db.models.literature import Literature
 
 
 class LiteratureAuthor(Base):
@@ -41,8 +36,5 @@ class LiteratureAuthor(Base):
 
     __table_args__ = (
         UniqueConstraint("literature_id", "author_order"),
-        CheckConstraint(
-            "author_order > 0",
-            name="author_order_positive"
-        )
+        CheckConstraint("author_order > 0", name="author_order_positive"),
     )

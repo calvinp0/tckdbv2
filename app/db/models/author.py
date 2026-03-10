@@ -2,18 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import (
-    BigInteger,
-    Text,
-    CHAR
-)
+from sqlalchemy import CHAR, BigInteger, Text
 from sqlalchemy.orm import (
-    mapped_column,
     Mapped,
+    mapped_column,
     relationship,
 )
 
-from app.db.base import Base, TimestampMixin, CreatedByMixin
+from app.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.db.models.literature_author import LiteratureAuthor

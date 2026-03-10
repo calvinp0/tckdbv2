@@ -17,6 +17,7 @@ Migration details that materially affect semantics:
 - `calculation.quality` uses the `calculation_quality` enum type
 - `calculation_output_geometry.role` uses the `calc_geom_role` enum type
 - `calculation_dependency.dependency_role` uses the `calc_dependency_role` enum type
+- `thermo.model_kind` uses the `thermo_model_kind` enum type
 - the calculation XOR ownership check is named `ck_calculation_exactly_one_owner`
 - `kinetics.model_kind` defaults to `modified_arrhenius`
 - `app_user.role` defaults to `user`
@@ -67,6 +68,8 @@ Migration details that materially affect semantics:
 ### Curation
 
 - `preferred_calculation_id`
+- `preferred_thermo_id`
+- `preferred_statmech_id`
 
 ## 3. transport
 
@@ -439,7 +442,7 @@ Note:
 
 - None
 
-## 19. calc_freq_results
+## 19. calc_freq_result
 
 ### Identity
 
@@ -459,7 +462,117 @@ Note:
 
 - None
 
-## 20. calculation_artifact
+## 20. calc_freq_mode
+
+### Identity
+
+- `calculation_id`
+- `mode_index`
+
+### Result
+
+- `frequency_cm1`
+- `reduced_mass_amu`
+- `force_constant_mdyn_a`
+- `ir_intensity_km_mol`
+- `is_scaled`
+- `is_projected`
+
+### Provenance
+
+- Inherited through `calculation_id`
+
+### Curation
+
+- None
+
+## 21. calc_hessian
+
+### Identity
+
+- `calculation_id`
+
+### Result
+
+- `n_atoms`
+- `matrix_dim`
+- `units`
+- `representation`
+
+### Provenance
+
+- `artifact_id`
+
+### Curation
+
+- None
+
+## 22. calc_scan_result
+
+### Identity
+
+- `calculation_id`
+- `scan_kind`
+- `dimension`
+- `n_points`
+
+### Result
+
+- `converged`
+
+### Provenance
+
+- Inherited through `calculation_id`
+
+### Curation
+
+- `note`
+
+## 23. calc_scan_coordinate
+
+### Identity
+
+- `calculation_id`
+- `coordinate_index`
+- `coordinate_kind`
+- `atom1_index`
+- `atom2_index`
+- `atom3_index`
+- `atom4_index`
+
+### Result
+
+- `symmetry_number`
+
+### Provenance
+
+- Inherited through `calculation_id`
+
+### Curation
+
+- `top_description`
+
+## 24. calc_scan_point
+
+### Identity
+
+- `calculation_id`
+- `point_index`
+
+### Result
+
+- `relative_energy_kj_mol`
+- `is_valid`
+
+### Provenance
+
+- `geometry_id`
+
+### Curation
+
+- None
+
+## 25. calculation_artifact
 
 ### Identity
 
@@ -481,12 +594,14 @@ Note:
 
 - None
 
-## 21. thermo
+## 26. thermo
 
 ### Identity
 
 - `id`
 - `species_entry_id`
+- `statmech_id`
+- `model_kind`
 
 ### Result
 
@@ -506,7 +621,7 @@ Note:
 
 - `note`
 
-## 22. thermo_point
+## 27. thermo_point
 
 ### Identity
 
@@ -528,7 +643,29 @@ Note:
 
 - None
 
-## 23. thermo_source_calculation
+## 28. thermo_nasa
+
+### Identity
+
+- `thermo_id`
+
+### Result
+
+- `t_low_k`
+- `t_mid_k`
+- `t_high_k`
+- `low_a1` to `low_a7`
+- `high_a1` to `high_a7`
+
+### Provenance
+
+- Inherited through `thermo_id`
+
+### Curation
+
+- None
+
+## 29. thermo_source_calculation
 
 ### Identity
 
@@ -547,7 +684,112 @@ Note:
 
 - `role`
 
-## 24. kinetics
+## 30. statmech
+
+### Identity
+
+- `id`
+- `species_entry_id`
+- `rigid_rotor_kind`
+- `statmech_treatment`
+
+### Result
+
+- `external_symmetry`
+- `point_group`
+- `is_linear`
+- `freq_scale_factor`
+- `uses_projected_frequencies`
+
+### Provenance
+
+- `scientific_origin`
+- `literature_id`
+- `workflow_tool_id`
+- `software_id`
+- `created_by`
+- `created_at`
+
+### Curation
+
+- `note`
+
+Note:
+
+- `external_symmetry` must be at least 1 when present
+
+## 31. statmech_source_calculation
+
+### Identity
+
+- `statmech_id`
+- `calculation_id`
+
+### Result
+
+- None
+
+### Provenance
+
+- Inherited through `statmech_id` and `calculation_id`
+
+### Curation
+
+- `role`
+
+## 32. statmech_torsion
+
+### Identity
+
+- `id`
+- `statmech_id`
+- `torsion_index`
+- `treatment_kind`
+- `source_scan_calculation_id`
+
+### Result
+
+- `symmetry_number`
+- `dimension`
+
+### Provenance
+
+- Inherited through `statmech_id`
+
+### Curation
+
+- `top_description`
+- `invalidated_reason`
+- `note`
+
+Note:
+
+- `dimension` must be at least 1
+
+## 33. statmech_torsion_definition
+
+### Identity
+
+- `torsion_id`
+- `coordinate_index`
+- `atom1_index`
+- `atom2_index`
+- `atom3_index`
+- `atom4_index`
+
+### Result
+
+- None
+
+### Provenance
+
+- Inherited through `torsion_id`
+
+### Curation
+
+- None
+
+## 34. kinetics
 
 ### Identity
 
@@ -583,7 +825,7 @@ Note:
 
 - `model_kind` is identity/classification for the stored law form and defaults to `modified_arrhenius`
 
-## 25. kinetics_source_calculation
+## 35. kinetics_source_calculation
 
 ### Identity
 
@@ -602,7 +844,7 @@ Note:
 
 - `role`
 
-## 26. network
+## 36. network
 
 ### Identity
 
@@ -626,7 +868,7 @@ Note:
 
 - None
 
-## 27. network_reaction
+## 37. network_reaction
 
 ### Identity
 
@@ -645,7 +887,7 @@ Note:
 
 - None
 
-## 28. network_species
+## 38. network_species
 
 ### Identity
 
@@ -668,7 +910,7 @@ Note:
 
 - `role` is optional in the migration; unlabeled membership rows are allowed
 
-## 29. literature
+## 39. literature
 
 ### Identity
 
@@ -700,7 +942,7 @@ Note:
 
 - None
 
-## 30. author
+## 40. author
 
 ### Identity
 
@@ -722,7 +964,7 @@ Note:
 
 - None
 
-## 31. literature_author
+## 41. literature_author
 
 ### Identity
 
@@ -745,7 +987,7 @@ Note:
 
 - `author_order` must be greater than zero
 
-## 32. workflow_tool
+## 42. workflow_tool
 
 ### Identity
 
@@ -766,7 +1008,7 @@ Note:
 
 - None
 
-## 33. app_user
+## 43. app_user
 
 ### Identity
 
@@ -796,6 +1038,6 @@ Note:
 ## High-level observations
 
 - Identity is concentrated in `species`, `chem_reaction`, `transition_state`, `geometry`, and the bibliographic/reference tables.
-- Result values are intentionally pushed into typed result tables such as `calc_sp_result`, `calc_opt_result`, `calc_freq_results`, `thermo`, `thermo_point`, and `kinetics`.
+- Result values are intentionally pushed into typed result tables such as `calc_sp_result`, `calc_opt_result`, `calc_freq_result`, `calc_freq_mode`, `calc_hessian`, `calc_scan_result`, `thermo`, `thermo_point`, `thermo_nasa`, `statmech`, and `kinetics`.
 - Provenance is carried mainly through `created_by`, `created_at`, `scientific_origin`, `literature_id`, `software_id`, `workflow_tool_id`, and link tables back to `calculation`.
 - Curation currently appears as preferred pointers and qualitative status fields: `preferred_calculation_id`, `preferred_ts_entry_id`, `status`, `quality`, and role-like labeling fields in link tables.

@@ -14,7 +14,7 @@ The main design choices are:
 - `species` is a stable identity object with canonical unmapped identifiers
 - `species_entry` and `transition_state_entry` are entry-level realizations that preserve submitted structure data
 - `calculation` is the provenance hub for computational work
-- typed result tables such as `calc_sp_result`, `calc_opt_result`, and `calc_freq_results` store direct job outputs
+- typed result tables such as `calc_sp_result`, `calc_opt_result`, `calc_freq_result`, and scan/frequency detail tables store direct job outputs
 - higher-level data products such as `transport`, `thermo`, and `kinetics` reference literature, software, and workflow tools; only `thermo` and `kinetics` also carry explicit source-calculation link tables
 
 ## 2. Core Identity Tables
@@ -111,6 +111,8 @@ Fields:
 - `kind` enum: `conformer`, `minimum`, `vdw_complex`
 - `mol`
 - `preferred_calculation_id`
+- `preferred_thermo_id`
+- `preferred_statmech_id`
 - `created_by`
 - `created_at`
 
@@ -118,6 +120,8 @@ Notes:
 
 - `mol` preserves the submitted stationary-point representation
 - `preferred_calculation_id` is a curated pointer to the chosen default calculation for this entry
+- `preferred_thermo_id` is a curated pointer to the chosen default thermo record for this entry
+- `preferred_statmech_id` is a curated pointer to the chosen default statmech record for this entry
 - the FK to `preferred_calculation_id` is `DEFERRABLE INITIALLY DEFERRED`
 - `created_at` is `NOT NULL DEFAULT now()`
 
@@ -375,12 +379,61 @@ Notes:
 - `n_steps`
 - `final_energy_hartree`
 
-`calc_freq_results`:
+`calc_freq_result`:
 
 - `calculation_id`
 - `n_imag`
 - `img_freq_cm1`
 - `zpe_hartree`
+
+`calc_freq_mode`:
+
+- `calculation_id`
+- `mode_index`
+- `frequency_cm1`
+- `reduced_mass_amu`
+- `force_constant_mdyn_a`
+- `ir_intensity_km_mol`
+- `is_scaled`
+- `is_projected`
+
+`calc_hessian`:
+
+- `calculation_id`
+- `n_atoms`
+- `matrix_dim`
+- `units`
+- `representation`
+- `artifact_id`
+
+`calc_scan_result`:
+
+- `calculation_id`
+- `scan_kind` enum: `torsion`, `bond`, `angle`, `multi_torsion`
+- `dimension`
+- `n_points`
+- `converged`
+- `note`
+
+`calc_scan_coordinate`:
+
+- `calculation_id`
+- `coordinate_index`
+- `coordinate_kind` enum: `torsion`, `bond`, `angle`
+- `atom1_index`
+- `atom2_index`
+- `atom3_index`
+- `atom4_index`
+- `symmetry_number`
+- `top_description`
+
+`calc_scan_point`:
+
+- `calculation_id`
+- `point_index`
+- `relative_energy_kj_mol`
+- `geometry_id`
+- `is_valid`
 
 Notes:
 
@@ -431,7 +484,9 @@ Fields:
 
 - `id`
 - `species_entry_id`
+- `statmech_id`
 - `scientific_origin`
+- `model_kind` enum: `nasa`, `shomate`, `tabulated`, `statmech`, `experimental`
 - `literature_id`
 - `workflow_tool_id`
 - `software_id`
@@ -444,13 +499,50 @@ Fields:
 Related tables:
 
 - `thermo_point(thermo_id, temperature_k, cp_j_mol_k, h_kj_mol, s_j_mol_k, g_kj_mol)`
+- `thermo_nasa(thermo_id, t_low_k, t_mid_k, t_high_k, low_a1..low_a7, high_a1..high_a7)`
 - `thermo_source_calculation(thermo_id, calculation_id, role)`
 
 Notes:
 
+- `model_kind` uses the `thermo_model_kind` enum
 - `thermo_source_calculation.role` is one of `opt`, `freq`, `sp`, `composite`, `imported`
 
-### 6.3 Kinetics
+### 6.3 Statmech
+
+Fields:
+
+- `id`
+- `species_entry_id`
+- `scientific_origin`
+- `literature_id`
+- `workflow_tool_id`
+- `software_id`
+- `external_symmetry`
+- `point_group`
+- `is_linear`
+- `rigid_rotor_kind` enum: `atom`, `linear`, `spherical_top`, `symmetric_top`, `asymmetric_top`
+- `statmech_treatment` enum: `rrho`, `rrho_1d`, `rrho_nd`, `rrho_1d_nd`, `rrho_ad`, `rrao`
+- `freq_scale_factor`
+- `uses_projected_frequencies`
+- `note`
+- `created_by`
+- `created_at`
+
+Related tables:
+
+- `statmech_source_calculation(statmech_id, calculation_id, role)`
+- `statmech_torsion(id, statmech_id, torsion_index, symmetry_number, treatment_kind, dimension, top_description, invalidated_reason, note, source_scan_calculation_id)`
+- `statmech_torsion_definition(torsion_id, coordinate_index, atom1_index, atom2_index, atom3_index, atom4_index)`
+
+Notes:
+
+- `statmech_source_calculation.role` is one of `opt`, `freq`, `sp`, `scan`, `composite`, `imported`
+- `statmech_torsion.treatment_kind` is one of `hindered_rotor`, `free_rotor`, `rigid_top`, `hindered_rotor_dos`
+- `statmech` has a deduplication unique constraint across species/provenance/treatment fields
+- `external_symmetry` must be at least 1 when present
+- `dimension` must be at least 1 on `statmech_torsion`
+
+### 6.4 Kinetics
 
 Fields:
 

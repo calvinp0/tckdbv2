@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Integer, Text, BigInteger, CHAR, ForeignKey
-from sqlalchemy.orm import relationship, mapped_column, Mapped
+from sqlalchemy import CHAR, BigInteger, ForeignKey, Integer, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import (Base,
-                         TimestampMixin)
+from app.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.db.models.calculation import CalculationOutputGeometry

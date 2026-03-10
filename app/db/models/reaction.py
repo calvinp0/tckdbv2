@@ -3,28 +3,31 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
-    Boolean,
+    BigInteger,
     CHAR,
-    Enum as SAEnum,
+    Boolean,
     ForeignKey,
     Integer,
     SmallInteger,
 )
-from sqlalchemy.orm import relationship, mapped_column, Mapped
+from sqlalchemy import (
+    Enum as SAEnum,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base, TimestampMixin, CreatedByMixin
+from app.db.base import Base, CreatedByMixin, TimestampMixin
 from app.db.models.common import ReactionRole
 
 if TYPE_CHECKING:
+
     from app.db.models.species import Species
     from app.db.models.transition_state import TransitionState, TransitionStateEntry
-    from app.db.models.user import AppUser
 
 
 class ChemReaction(Base, TimestampMixin):
     __tablename__ = "chem_reaction"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     stoichiometry_hash: Mapped[Optional[str]] = mapped_column(
         CHAR(64), unique=True, nullable=True
     )
@@ -53,10 +56,12 @@ class ReactionParticipant(Base):
     __tablename__ = "reaction_participant"
 
     reaction_id: Mapped[int] = mapped_column(
+        BigInteger,
         ForeignKey("chem_reaction.id", deferrable=True, initially="IMMEDIATE"),
         primary_key=True,
     )
     species_id: Mapped[int] = mapped_column(
+        BigInteger,
         ForeignKey("species.id", deferrable=True, initially="IMMEDIATE"),
         primary_key=True,
     )
@@ -64,9 +69,7 @@ class ReactionParticipant(Base):
         SAEnum(ReactionRole, name="reaction_role"),
         primary_key=True,
     )
-    stoichiometry: Mapped[int] = mapped_column(
-        SmallInteger, nullable=False
-    )
+    stoichiometry: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     reaction: Mapped["ChemReaction"] = relationship(
         back_populates="participants",
     )
@@ -78,13 +81,15 @@ class ReactionParticipant(Base):
 class ReactionEntry(Base, TimestampMixin, CreatedByMixin):
     __tablename__ = "reaction_entry"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     reaction_id: Mapped[int] = mapped_column(
+        BigInteger,
         ForeignKey("chem_reaction.id", deferrable=True, initially="IMMEDIATE"),
         nullable=False,
     )
 
     preferred_ts_entry_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
         ForeignKey("transition_state_entry.id", deferrable=True, initially="IMMEDIATE"),
         nullable=True,
     )
