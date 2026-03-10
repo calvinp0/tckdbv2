@@ -16,11 +16,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.schema import UniqueConstraint
 
 from app.db.base import Base, CreatedByMixin, TimestampMixin
-from app.db.models.common import MoleculeKind, StationaryPointKind
+from app.db.models.common import MoleculeKind, StationaryPointKind, ReactionRole
 from app.db.types import RDKitMol
 
 if TYPE_CHECKING:
     from app.db.models.calculation import Calculation
+    from app.db.models.reaction import ReactionParticipant
 
 
 class Species(Base, TimestampMixin):
@@ -38,8 +39,18 @@ class Species(Base, TimestampMixin):
     entries: Mapped[list["SpeciesEntry"]] = relationship(
         back_populates="species", cascade="all, delete-orphan"
     )
-
+    reaction_participants: Mapped[list["ReactionParticipant"]] = relationship(
+        back_populates="species",
+    )
     __table_args__ = UniqueConstraint("inchi_key")
+
+    @property
+    def as_reactant_in(self) -> list["ReactionParticipant"]:
+        return [rp for rp in self.reaction_participants if rp.role == ReactionRole.reactant]
+
+    @property
+    def as_product_in(self) -> list["ReactionParticipant"]:
+        return [rp for rp in self.reaction_participants if rp.role == ReactionRole.product]
 
 
 class SpeciesEntry(Base, TimestampMixin, CreatedByMixin):

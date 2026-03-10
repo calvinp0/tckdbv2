@@ -55,6 +55,7 @@ Constraints and notes:
 
 - `stoichiometry_hash` is unique
 - participants are stored separately in `reaction_participant`
+- `created_at` is `NOT NULL DEFAULT now()`
 
 ### 2.3 Transition State
 
@@ -135,6 +136,7 @@ Notes:
 
 - `preferred_ts_entry_id` is a curated pointer to the chosen TS entry for this reaction entry
 - unlike the preferred calculation pointers, this FK is not deferred in the migration
+- `created_at` is `NOT NULL DEFAULT now()`
 
 ### 3.3 Transition State Entry
 

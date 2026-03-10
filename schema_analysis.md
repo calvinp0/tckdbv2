@@ -13,7 +13,7 @@ Migration details that materially affect semantics:
 
 - `transition_state_entry.status` defaults to `optimized`
 - `calculation.quality` defaults to `raw`
-- `species.created_at`, `species_entry.created_at`, and `calculation.created_at` are `NOT NULL DEFAULT now()`
+- `species.created_at`, `species_entry.created_at`, `chem_reaction.created_at`, `reaction_entry.created_at`, and `calculation.created_at` are `NOT NULL DEFAULT now()`
 - `calculation.quality` uses the `calculation_quality` enum type
 - `calculation_output_geometry.role` uses the `calc_geom_role` enum type
 - `calculation_dependency.dependency_role` uses the `calc_dependency_role` enum type
