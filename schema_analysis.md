@@ -223,6 +223,7 @@ Migration details that materially affect semantics:
 ### Curation
 
 - `preferred_ts_entry_id`
+- `preferred_kinetics_id`
 
 Note:
 
@@ -284,8 +285,8 @@ Note:
 
 - `id`
 - `name`
-- `version`
-- `build`
+- `website`
+- `description`
 
 ### Result
 
@@ -299,7 +300,29 @@ Note:
 
 - None
 
-## 13. level_of_theory
+## 13. software_release
+
+### Identity
+
+- `id`
+- `software_id`
+- `version`
+- `revision`
+- `build`
+
+### Result
+
+- `release_date`
+
+### Provenance
+
+- `created_at`
+
+### Curation
+
+- `notes`
+
+## 14. level_of_theory
 
 ### Identity
 
@@ -325,7 +348,7 @@ Note:
 
 - None
 
-## 14. calculation
+## 15. calculation
 
 ### Identity
 
@@ -357,7 +380,7 @@ Note:
 - the enum type name is `calculation_quality`
 - the XOR ownership check is named `ck_calculation_exactly_one_owner`
 
-## 15. calculation_output_geometry
+## 16. calculation_output_geometry
 
 ### Identity
 
@@ -381,7 +404,7 @@ Note:
 
 - `role` uses the `calc_geom_role` enum with values `initial`, `final`, `intermediate`, `scan_point`, `irc_forward`, `irc_reverse`, `neb_image`
 
-## 16. calculation_dependency
+## 17. calculation_dependency
 
 ### Identity
 
@@ -404,7 +427,7 @@ Note:
 
 - `dependency_role` uses the `calc_dependency_role` enum with values `optimized_from`, `freq_on`, `single_point_on`, `arkane_source`, `irc_start`, `irc_followup`, `scan_parent`, `neb_parent`
 
-## 17. calc_sp_result
+## 18. calc_sp_result
 
 ### Identity
 
@@ -422,7 +445,7 @@ Note:
 
 - None
 
-## 18. calc_opt_result
+## 19. calc_opt_result
 
 ### Identity
 
@@ -442,7 +465,7 @@ Note:
 
 - None
 
-## 19. calc_freq_result
+## 20. calc_freq_result
 
 ### Identity
 
@@ -462,7 +485,7 @@ Note:
 
 - None
 
-## 20. calc_freq_mode
+## 21. calc_freq_mode
 
 ### Identity
 
@@ -486,7 +509,7 @@ Note:
 
 - None
 
-## 21. calc_hessian
+## 22. calc_hessian
 
 ### Identity
 
@@ -507,7 +530,7 @@ Note:
 
 - None
 
-## 22. calc_scan_result
+## 23. calc_scan_result
 
 ### Identity
 
@@ -528,7 +551,7 @@ Note:
 
 - `note`
 
-## 23. calc_scan_coordinate
+## 24. calc_scan_coordinate
 
 ### Identity
 
@@ -552,7 +575,7 @@ Note:
 
 - `top_description`
 
-## 24. calc_scan_point
+## 25. calc_scan_point
 
 ### Identity
 
@@ -572,7 +595,7 @@ Note:
 
 - None
 
-## 25. calculation_artifact
+## 26. calculation_artifact
 
 ### Identity
 
@@ -594,7 +617,7 @@ Note:
 
 - None
 
-## 26. thermo
+## 27. thermo
 
 ### Identity
 
@@ -621,7 +644,7 @@ Note:
 
 - `note`
 
-## 27. thermo_point
+## 28. thermo_point
 
 ### Identity
 
@@ -643,7 +666,7 @@ Note:
 
 - None
 
-## 28. thermo_nasa
+## 29. thermo_nasa
 
 ### Identity
 
@@ -665,7 +688,7 @@ Note:
 
 - None
 
-## 29. thermo_source_calculation
+## 30. thermo_source_calculation
 
 ### Identity
 
@@ -684,7 +707,7 @@ Note:
 
 - `role`
 
-## 30. statmech
+## 31. statmech
 
 ### Identity
 
@@ -718,7 +741,7 @@ Note:
 
 - `external_symmetry` must be at least 1 when present
 
-## 31. statmech_source_calculation
+## 32. statmech_source_calculation
 
 ### Identity
 
@@ -737,7 +760,7 @@ Note:
 
 - `role`
 
-## 32. statmech_torsion
+## 33. statmech_torsion
 
 ### Identity
 
@@ -766,7 +789,7 @@ Note:
 
 - `dimension` must be at least 1
 
-## 33. statmech_torsion_definition
+## 34. statmech_torsion_definition
 
 ### Identity
 
@@ -789,7 +812,7 @@ Note:
 
 - None
 
-## 34. kinetics
+## 35. kinetics
 
 ### Identity
 
@@ -812,8 +835,8 @@ Note:
 
 - `scientific_origin`
 - `literature_id`
-- `workflow_tool_id`
-- `software_id`
+- `workflow_tool_release_id`
+- `software_release_id`
 - `created_by`
 - `created_at`
 
@@ -824,8 +847,9 @@ Note:
 Note:
 
 - `model_kind` is identity/classification for the stored law form and defaults to `modified_arrhenius`
+- allowed values are `arrhenius`, `modified_arrhenius`, `chebyshev`, `plog`, `falloff`, and `tabulated`
 
-## 35. kinetics_source_calculation
+## 36. kinetics_source_calculation
 
 ### Identity
 
@@ -844,7 +868,7 @@ Note:
 
 - `role`
 
-## 36. network
+## 37. network
 
 ### Identity
 
@@ -854,13 +878,20 @@ Note:
 
 ### Result
 
-- None
+- `is_pressure_dependent`
+- `method`
+- `tmin_k`
+- `tmax_k`
+- `pmin_bar`
+- `pmax_bar`
+- `maximum_grain_size_kj_mol`
+- `minimum_grain_count`
 
 ### Provenance
 
 - `literature_id`
-- `software_id`
-- `workflow_tool_id`
+- `software_release_id`
+- `workflow_tool_release_id`
 - `created_by`
 - `created_at`
 
@@ -868,7 +899,7 @@ Note:
 
 - None
 
-## 37. network_reaction
+## 38. network_reaction
 
 ### Identity
 
@@ -887,7 +918,7 @@ Note:
 
 - None
 
-## 38. network_species
+## 39. network_species
 
 ### Identity
 
@@ -910,7 +941,7 @@ Note:
 
 - `role` is optional in the migration; unlabeled membership rows are allowed
 
-## 39. literature
+## 40. literature
 
 ### Identity
 
@@ -942,7 +973,7 @@ Note:
 
 - None
 
-## 40. author
+## 41. author
 
 ### Identity
 
@@ -964,7 +995,7 @@ Note:
 
 - None
 
-## 41. literature_author
+## 42. literature_author
 
 ### Identity
 
@@ -987,13 +1018,13 @@ Note:
 
 - `author_order` must be greater than zero
 
-## 42. workflow_tool
+## 43. workflow_tool
 
 ### Identity
 
 - `id`
 - `name`
-- `version`
+- `website`
 - `description`
 
 ### Result
@@ -1008,7 +1039,32 @@ Note:
 
 - None
 
-## 43. app_user
+## 44. workflow_tool_release
+
+### Identity
+
+- `id`
+- `workflow_tool_id`
+- `version`
+- `git_commit`
+- `git_branch`
+- `git_tag`
+- `is_dirty`
+
+### Result
+
+- `release_date`
+
+### Provenance
+
+- `created_at`
+- `source_url`
+
+### Curation
+
+- `notes`
+
+## 45. app_user
 
 ### Identity
 
@@ -1039,5 +1095,5 @@ Note:
 
 - Identity is concentrated in `species`, `chem_reaction`, `transition_state`, `geometry`, and the bibliographic/reference tables.
 - Result values are intentionally pushed into typed result tables such as `calc_sp_result`, `calc_opt_result`, `calc_freq_result`, `calc_freq_mode`, `calc_hessian`, `calc_scan_result`, `thermo`, `thermo_point`, `thermo_nasa`, `statmech`, and `kinetics`.
-- Provenance is carried mainly through `created_by`, `created_at`, `scientific_origin`, `literature_id`, `software_id`, `workflow_tool_id`, and link tables back to `calculation`.
+- Provenance is carried mainly through `created_by`, `created_at`, `scientific_origin`, `literature_id`, software and workflow foreign keys, and link tables back to `calculation`.
 - Curation currently appears as preferred pointers and qualitative status fields: `preferred_calculation_id`, `preferred_ts_entry_id`, `status`, `quality`, and role-like labeling fields in link tables.

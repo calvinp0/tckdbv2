@@ -90,6 +90,12 @@ class ArtifactKind(str, Enum):
     ancillary = "ancillary"
 
 
+class AUnits(str, Enum):
+    cm3_mol_s = "cm3_mol_s"
+    cm3_molecule_s = "cm3_molecule_s"
+    s_1 = "s_1"
+
+
 class TransitionStateEntryStatus(str, Enum):
     guess = "guess"
     optimized = "optimized"
@@ -116,6 +122,10 @@ class ThermoCalculationRole(str, Enum):
 class KineticsModelKind(str, Enum):
     arrhenius = "arrhenius"
     modified_arrhenius = "modified_arrhenius"
+    chebyshev = "chebyshev"
+    plog = "plog"
+    falloff = "falloff"
+    tabulated = "tabulated"
 
 
 class KineticsCalculationRole(str, Enum):
@@ -126,6 +136,13 @@ class KineticsCalculationRole(str, Enum):
     irc = "irc"
     master_equation = "master_equation"
     fit_source = "fit_source"
+
+
+class TunnelingModelKind(str, Enum):
+    none = "none"
+    wigner = "wigner"
+    eckart = "eckart"
+    skodje_truhlar = "skodje_truhlar"
 
 
 class NetworkSpeciesRole(str, Enum):

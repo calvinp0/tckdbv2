@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 
 class LiteratureAuthor(Base):
+    """Links literature records to authors in citation order."""
+
     __tablename__ = "literature_author"
 
     literature_id: Mapped[int] = mapped_column(

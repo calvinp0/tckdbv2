@@ -9,9 +9,9 @@ from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
     Integer,
+    SmallInteger,
     Text,
     UniqueConstraint,
-    SmallInteger
 )
 from sqlalchemy import (
     Enum as SAEnum,
@@ -24,9 +24,9 @@ from app.db.models.common import (
     CalculationDependencyRole,
     CalculationGeometryRole,
     CalculationQuality,
-    CalculationType,
     CalculationScanCoordinateKind,
-    CalculationScanKind
+    CalculationScanKind,
+    CalculationType,
 )
 
 if TYPE_CHECKING:
@@ -36,6 +36,8 @@ if TYPE_CHECKING:
 
 
 class Calculation(Base, TimestampMixin, CreatedByMixin):
+    """Stores one computational job and its provenance links."""
+
     __tablename__ = "calculation"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -138,17 +140,19 @@ class Calculation(Base, TimestampMixin, CreatedByMixin):
         cascade="all, delete-orphan",
     )
 
-    __table_args__ = (CheckConstraint(
+    __table_args__ = CheckConstraint(
         """
             (species_entry_id IS NOT NULL AND transition_state_entry_id IS NULL)
             OR
             (species_entry_id IS NULL AND transition_state_entry_id IS NOT NULL)
             """,
         name="exactly_one_owner",
-    ))
+    )
 
 
 class CalculationOutputGeometry(Base):
+    """Maps output geometries produced by a calculation."""
+
     __tablename__ = "calculation_output_geometry"
 
     calculation_id: Mapped[int] = mapped_column(
@@ -178,6 +182,8 @@ class CalculationOutputGeometry(Base):
 
 
 class CalculationDependency(Base):
+    """Stores directed provenance edges between calculations."""
+
     __tablename__ = "calculation_dependency"
 
     parent_calculation_id: Mapped[int] = mapped_column(
@@ -214,6 +220,8 @@ class CalculationDependency(Base):
 
 
 class CalculationSPResult(Base):
+    """Stores single-point energy results for a calculation."""
+
     __tablename__ = "calc_sp_result"
 
     calculation_id: Mapped[int] = mapped_column(
@@ -229,6 +237,8 @@ class CalculationSPResult(Base):
 
 
 class CalculationOptResult(Base):
+    """Stores optimization-specific results for a calculation."""
+
     __tablename__ = "calc_opt_result"
 
     calculation_id: Mapped[int] = mapped_column(
@@ -246,6 +256,8 @@ class CalculationOptResult(Base):
 
 
 class CalculationFreqResult(Base):
+    """Stores summary vibrational frequency results for a calculation."""
+
     __tablename__ = "calc_freq_result"
 
     calculation_id: Mapped[int] = mapped_column(
@@ -261,22 +273,26 @@ class CalculationFreqResult(Base):
         back_populates="freq_result",
     )
     modes: Mapped[list["CalculationFreqMode"]] = relationship(
-    back_populates="freq_result",
-    cascade="all, delete-orphan",
-    order_by="CalculationFreqMode.mode_index",
-)
+        back_populates="freq_result",
+        cascade="all, delete-orphan",
+        order_by="CalculationFreqMode.mode_index",
+    )
     hessian: Mapped[Optional["CalculationHessian"]] = relationship(
-    back_populates="freq_result",
-    cascade="all, delete-orphan",
-    uselist=False,
-)
+        back_populates="freq_result",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
 
 
 class CalculationFreqMode(Base):
+    """Stores one vibrational mode belonging to a frequency result."""
+
     __tablename__ = "calc_freq_mode"
 
     calculation_id: Mapped[int] = mapped_column(
-        ForeignKey("calc_freq_result.calculation_id", deferrable=True, initially="IMMEDIATE"),
+        ForeignKey(
+            "calc_freq_result.calculation_id", deferrable=True, initially="IMMEDIATE"
+        ),
         BigInteger,
         primary_key=True,
     )
@@ -290,19 +306,22 @@ class CalculationFreqMode(Base):
     is_scaled: Mapped[Optional[bool]] = mapped_column(nullable=True)
     is_projected: Mapped[Optional[bool]] = mapped_column(nullable=True)
 
-    freq_result: Mapped["CalculationFreqResult"] = relationship(
-        back_populates="modes"
-    )
+    freq_result: Mapped["CalculationFreqResult"] = relationship(back_populates="modes")
 
     __table_args__ = (
         CheckConstraint("mode_index >= 1", name="calc_freq_mode_index_ge_1"),
     )
 
+
 class CalculationHessian(Base):
+    """Stores Hessian matrix metadata for a frequency result."""
+
     __tablename__ = "calc_hessian"
 
     calculation_id: Mapped[int] = mapped_column(
-        ForeignKey("calc_freq_result.calculation_id", deferrable=True, initially="IMMEDIATE"),
+        ForeignKey(
+            "calc_freq_result.calculation_id", deferrable=True, initially="IMMEDIATE"
+        ),
         BigInteger,
         primary_key=True,
     )
@@ -322,12 +341,18 @@ class CalculationHessian(Base):
     artifact: Mapped[Optional["CalculationArtifact"]] = relationship()
 
     __table_args__ = (
-        CheckConstraint("n_atoms IS NULL OR n_atoms >= 1", name="calc_hessian_n_atoms_ge_1"),
-        CheckConstraint("matrix_dim IS NULL OR matrix_dim >= 1", name="calc_hessian_matrix_dim_ge_1"),
+        CheckConstraint(
+            "n_atoms IS NULL OR n_atoms >= 1", name="calc_hessian_n_atoms_ge_1"
+        ),
+        CheckConstraint(
+            "matrix_dim IS NULL OR matrix_dim >= 1", name="calc_hessian_matrix_dim_ge_1"
+        ),
     )
 
 
 class CalculationScanResult(Base):
+    """Stores summary metadata for a scan calculation."""
+
     __tablename__ = "calc_scan_result"
 
     calculation_id: Mapped[int] = mapped_column(
@@ -337,8 +362,7 @@ class CalculationScanResult(Base):
     )
 
     scan_kind: Mapped[CalculationScanKind] = mapped_column(
-        SAEnum(CalculationScanKind, name = "scan_kind"),
-        nullable=False
+        SAEnum(CalculationScanKind, name="scan_kind"), nullable=False
     )
     dimension: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     n_points: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -367,18 +391,22 @@ class CalculationScanResult(Base):
 
 
 class CalculationScanCoordinate(Base):
+    """Defines one scanned coordinate for a scan calculation."""
+
     __tablename__ = "calc_scan_coordinate"
 
     calculation_id: Mapped[int] = mapped_column(
-        ForeignKey("calc_scan_result.calculation_id", deferrable=True, initially="IMMEDIATE"),
+        ForeignKey(
+            "calc_scan_result.calculation_id", deferrable=True, initially="IMMEDIATE"
+        ),
         BigInteger,
         primary_key=True,
     )
     coordinate_index: Mapped[int] = mapped_column(Integer, primary_key=True)
 
     coordinate_kind: Mapped[CalculationScanCoordinateKind] = mapped_column(
-        SAEnum(CalculationScanCoordinateKind, name = "scan_coordinate_kind"),
-        nullable=False
+        SAEnum(CalculationScanCoordinateKind, name="scan_coordinate_kind"),
+        nullable=False,
     )
     atom1_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     atom2_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -392,21 +420,38 @@ class CalculationScanCoordinate(Base):
         back_populates="coordinates",
     )
 
-
     __table_args__ = (
-        CheckConstraint("coordinate_index >= 1", name="calc_scan_coordinate_index_ge_1"),
-        CheckConstraint("symmetry_number IS NULL OR symmetry_number >= 1", name="calc_scan_coord_symmetry_ge_1"),
-        CheckConstraint("atom1_index IS NULL OR atom1_index >= 1", name="calc_scan_coord_atom1_ge_1"),
-        CheckConstraint("atom2_index IS NULL OR atom2_index >= 1", name="calc_scan_coord_atom2_ge_1"),
-        CheckConstraint("atom3_index IS NULL OR atom3_index >= 1", name="calc_scan_coord_atom3_ge_1"),
-        CheckConstraint("atom4_index IS NULL OR atom4_index >= 1", name="calc_scan_coord_atom4_ge_1"),
+        CheckConstraint(
+            "coordinate_index >= 1", name="calc_scan_coordinate_index_ge_1"
+        ),
+        CheckConstraint(
+            "symmetry_number IS NULL OR symmetry_number >= 1",
+            name="calc_scan_coord_symmetry_ge_1",
+        ),
+        CheckConstraint(
+            "atom1_index IS NULL OR atom1_index >= 1", name="calc_scan_coord_atom1_ge_1"
+        ),
+        CheckConstraint(
+            "atom2_index IS NULL OR atom2_index >= 1", name="calc_scan_coord_atom2_ge_1"
+        ),
+        CheckConstraint(
+            "atom3_index IS NULL OR atom3_index >= 1", name="calc_scan_coord_atom3_ge_1"
+        ),
+        CheckConstraint(
+            "atom4_index IS NULL OR atom4_index >= 1", name="calc_scan_coord_atom4_ge_1"
+        ),
     )
 
+
 class CalculationScanPoint(Base):
+    """Stores one point from a scan calculation profile."""
+
     __tablename__ = "calc_scan_point"
 
     calculation_id: Mapped[int] = mapped_column(
-        ForeignKey("calc_scan_result.calculation_id", deferrable=True, initially="IMMEDIATE"),
+        ForeignKey(
+            "calc_scan_result.calculation_id", deferrable=True, initially="IMMEDIATE"
+        ),
         BigInteger,
         primary_key=True,
     )
@@ -424,13 +469,14 @@ class CalculationScanPoint(Base):
     )
     geometry: Mapped[Optional["Geometry"]] = relationship()
 
-
     __table_args__ = (
         CheckConstraint("point_index >= 1", name="calc_scan_point_index_ge_1"),
     )
 
 
 class CalculationArtifact(Base, TimestampMixin):
+    """Stores file artifacts emitted or consumed by a calculation."""
+
     __tablename__ = "calculation_artifact"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -452,5 +498,7 @@ class CalculationArtifact(Base, TimestampMixin):
     )
 
     __table_args__ = (
-        CheckConstraint("bytes IS NULL OR bytes >= 0", name="calculation_artifact_bytes_ge_0"),
+        CheckConstraint(
+            "bytes IS NULL OR bytes >= 0", name="calculation_artifact_bytes_ge_0"
+        ),
     )

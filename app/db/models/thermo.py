@@ -4,11 +4,11 @@ from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
     BigInteger,
+    CheckConstraint,
     Double,
     ForeignKey,
     PrimaryKeyConstraint,
     Text,
-    CheckConstraint,
 )
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -21,15 +21,18 @@ from app.db.models.common import (
 )
 
 if TYPE_CHECKING:
-    from app.db.models.species import SpeciesEntry
+    from app.db.models.workflow_tool import WorkflowTool
+
     from app.db.models.calculation import Calculation
     from app.db.models.literature import Literature
     from app.db.models.software import Software
-    from app.db.models.workflow_tool import WorkflowTool
+    from app.db.models.species import SpeciesEntry
     from app.db.models.statmech import Statmech
 
 
 class Thermo(Base, TimestampMixin, CreatedByMixin):
+    """Stores curated thermochemistry records for a species entry."""
+
     __tablename__ = "thermo"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -46,20 +49,17 @@ class Thermo(Base, TimestampMixin, CreatedByMixin):
     )
 
     scientific_origin: Mapped[ScientificOriginKind] = mapped_column(
-        SAEnum(ScientificOriginKind, name="scientific_origin_kind"),
-        nullable=False
+        SAEnum(ScientificOriginKind, name="scientific_origin_kind"), nullable=False
     )
 
     model_kind: Mapped[ThermoModelKind] = mapped_column(
-        SAEnum(ThermoModelKind, name = "thermo_model_kind"),
-        nullable=False
+        SAEnum(ThermoModelKind, name="thermo_model_kind"), nullable=False
     )
 
     literature_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("literature.id", deferrable=True, initially="IMMEDIATE"),
-        nullable=True
+        nullable=True,
     )
-
 
     workflow_tool_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("workflow_tool.id", deferrable=True, initially="IMMEDIATE"),
@@ -109,6 +109,8 @@ class Thermo(Base, TimestampMixin, CreatedByMixin):
 
 
 class ThermoPoint(Base):
+    """Stores tabulated thermodynamic values at a specific temperature."""
+
     __tablename__ = "thermo_point"
 
     thermo_id: Mapped[int] = mapped_column(
@@ -127,12 +129,12 @@ class ThermoPoint(Base):
         back_populates="points",
     )
 
-    __table_args__ = (
-        PrimaryKeyConstraint("thermo_id", "temperature_k"),
-    )
+    __table_args__ = (PrimaryKeyConstraint("thermo_id", "temperature_k"),)
 
 
 class ThermoNASA(Base):
+    """Stores NASA polynomial coefficients for a thermo record."""
+
     __tablename__ = "thermo_nasa"
 
     thermo_id: Mapped[int] = mapped_column(
@@ -173,6 +175,8 @@ class ThermoNASA(Base):
 
 
 class ThermoSourceCalculation(Base):
+    """Links thermo records to the calculations that support them."""
+
     __tablename__ = "thermo_source_calculation"
 
     thermo_id: Mapped[int] = mapped_column(
@@ -196,6 +200,4 @@ class ThermoSourceCalculation(Base):
 
     calculation: Mapped["Calculation"] = relationship()
 
-    __table_args__ = (
-        PrimaryKeyConstraint("thermo_id", "calculation_id", "role"),
-    )
+    __table_args__ = (PrimaryKeyConstraint("thermo_id", "calculation_id", "role"),)

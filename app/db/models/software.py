@@ -1,0 +1,106 @@
+from __future__ import annotations
+
+from datetime import date
+from typing import TYPE_CHECKING, Optional
+
+from sqlalchemy import BigInteger, Date, ForeignKey, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.db.models.transport import Transport
+
+    from app.db.models.calculation import Calculation
+    from app.db.models.kinetics import Kinetics
+    from app.db.models.network import Network
+    from app.db.models.statmech import Statmech
+    from app.db.models.thermo import Thermo
+
+
+class Software(Base, TimestampMixin):
+    """
+    Stable identity of a software package or program.
+
+    Examples include Gaussian, ORCA, CREST, Arkane, and ARC.
+    Version-specific provenance is stored in SoftwareRelease.
+    """
+
+    __tablename__ = "software"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    website: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    releases: Mapped[list["SoftwareRelease"]] = relationship(
+        back_populates="software",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "name",
+            name="software_name_uq",
+        ),
+    )
+
+
+class SoftwareRelease(Base, TimestampMixin):
+    """
+    Specific release provenance for a software package.
+
+    This stores exact executable-level metadata such as version,
+    Gaussian-style revision labels, and build identifiers.
+    """
+
+    __tablename__ = "software_release"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+
+    software_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("software.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=False,
+    )
+
+    version: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    revision: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    build: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    release_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    software: Mapped["Software"] = relationship(
+        back_populates="releases",
+    )
+
+    calculations: Mapped[list["Calculation"]] = relationship(
+        back_populates="software_release",
+    )
+    thermo_records: Mapped[list["Thermo"]] = relationship(
+        back_populates="software_release",
+    )
+    statmech_records: Mapped[list["Statmech"]] = relationship(
+        back_populates="software_release",
+    )
+    transport_records: Mapped[list["Transport"]] = relationship(
+        back_populates="software_release",
+    )
+    kinetics_records: Mapped[list["Kinetics"]] = relationship(
+        back_populates="software_release",
+    )
+    networks: Mapped[list["Network"]] = relationship(
+        back_populates="software_release",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "software_id",
+            "version",
+            "revision",
+            "build",
+            name="software_release_dedupe_uq",
+        ),
+    )

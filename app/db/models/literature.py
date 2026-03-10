@@ -25,6 +25,8 @@ if TYPE_CHECKING:
 
 
 class Literature(Base, TimestampMixin, CreatedByMixin):
+    """Stores bibliographic records used as provenance across the schema."""
+
     __tablename__ = "literature"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 
 
 class TransitionState(Base, TimestampMixin, CreatedByMixin):
+    """Stores a reaction-centered transition state identity."""
+
     __tablename__ = "transition_state"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -38,6 +40,8 @@ class TransitionState(Base, TimestampMixin, CreatedByMixin):
 
 
 class TransitionStateEntry(Base, TimestampMixin, CreatedByMixin):
+    """Stores an entry-level transition-state structure and status."""
+
     __tablename__ = "transition_state_entry"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

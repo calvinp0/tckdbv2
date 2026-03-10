@@ -134,12 +134,14 @@ Fields:
 - `id`
 - `reaction_id`
 - `preferred_ts_entry_id`
+- `preferred_kinetics_id`
 - `created_by`
 - `created_at`
 
 Notes:
 
 - `preferred_ts_entry_id` is a curated pointer to the chosen TS entry for this reaction entry
+- `preferred_kinetics_id` is a curated pointer to the chosen kinetics record for this reaction entry
 - unlike the preferred calculation pointers, this FK is not deferred in the migration
 - `created_at` is `NOT NULL DEFAULT now()`
 
@@ -178,29 +180,66 @@ Fields:
 
 - `id`
 - `name`
-- `version`
-- `build`
-- `created_at`
-
-Constraint:
-
-- unique on `(name, version)`
-
-### 4.2 Workflow Tool
-
-Fields:
-
-- `id`
-- `name`
-- `version`
+- `website`
 - `description`
 - `created_at`
 
 Constraint:
 
-- unique on `(name, version)`
+- unique on `name`
 
-### 4.3 Level of Theory
+### 4.2 Software Release
+
+Fields:
+
+- `id`
+- `software_id`
+- `version`
+- `revision`
+- `build`
+- `release_date`
+- `notes`
+- `created_at`
+
+Constraint:
+
+- unique on `(software_id, version, revision, build)`
+
+### 4.3 Workflow Tool
+
+Fields:
+
+- `id`
+- `name`
+- `website`
+- `description`
+- `created_at`
+
+Constraint:
+
+- unique on `name`
+
+### 4.4 Workflow Tool Release
+
+Fields:
+
+- `id`
+- `workflow_tool_id`
+- `version`
+- `git_commit`
+- `git_branch`
+- `git_tag`
+- `is_dirty`
+- `source_url`
+- `release_date`
+- `notes`
+- `created_at`
+
+Constraint:
+
+- strict deduplication across `(workflow_tool_id, version, git_commit, git_branch, git_tag, is_dirty)`
+
+### 4.5 Level of Theory
 
 Fields:
 
@@ -219,7 +258,7 @@ Constraint:
 
 - `lot_hash` is unique
 
-### 4.4 Literature
+### 4.6 Literature
 
 Fields:
 
@@ -246,7 +285,7 @@ Constraints:
 - partial unique index on `doi` where not null
 - partial unique index on `isbn` where not null
 
-### 4.5 Author and Literature Author
+### 4.7 Author and Literature Author
 
 `author` fields:
 
@@ -270,7 +309,7 @@ Constraints:
 - `literature_author(literature_id, author_id)` unique
 - `literature_author.author_order` must be greater than zero
 
-### 4.6 App User
+### 4.8 App User
 
 Fields:
 
@@ -321,6 +360,8 @@ Notes:
 
 - this is the main computational provenance hub
 - the owning entry is either a species entry or a TS entry, never both
+- `software_id` points to `software.id`
+- `workflow_tool_id` points to `workflow_tool.id`
 - `quality` defaults to `raw`
 - the enum type name is `calculation_quality`
 - the XOR ownership check is named `ck_calculation_exactly_one_owner`
@@ -504,6 +545,8 @@ Related tables:
 
 Notes:
 
+- `software_id` points to `software.id`
+- `workflow_tool_id` points to `workflow_tool.id`
 - `model_kind` uses the `thermo_model_kind` enum
 - `thermo_source_calculation.role` is one of `opt`, `freq`, `sp`, `composite`, `imported`
 
@@ -536,6 +579,8 @@ Related tables:
 
 Notes:
 
+- `software_id` points to `software.id`
+- `workflow_tool_id` points to `workflow_tool.id`
 - `statmech_source_calculation.role` is one of `opt`, `freq`, `sp`, `scan`, `composite`, `imported`
 - `statmech_torsion.treatment_kind` is one of `hindered_rotor`, `free_rotor`, `rigid_top`, `hindered_rotor_dos`
 - `statmech` has a deduplication unique constraint across species/provenance/treatment fields
@@ -549,20 +594,24 @@ Fields:
 - `id`
 - `reaction_entry_id`
 - `scientific_origin`
-- `model_kind` enum: `arrhenius`, `modified_arrhenius`
+- `model_kind` enum: `arrhenius`, `modified_arrhenius`, `chebyshev`, `plog`, `falloff`, `tabulated`
 - `literature_id`
-- `workflow_tool_id`
-- `software_id`
+- `workflow_tool_release_id`
+- `software_release_id`
 - `created_by`
 - `created_at`
 - `a`
-- `a_units`
+- `a_units` enum: `cm3_mol_s`, `cm3_molecule_s`, `s_1`
 - `n`
 - `ea_kj_mol`
+- `t0_k`
 - `tmin_k`
 - `tmax_k`
 - `degeneracy`
-- `tunneling_model`
+- `tunneling_model` enum: `none`, `wigner`, `eckart`, `skodje_truhlar`
+- `a_uncertainty`
+- `n_uncertainty`
+- `ea_uncertainty_kj_mol`
 - `note`
 
 Related table:
@@ -571,8 +620,13 @@ Related table:
 
 Notes:
 
+- `software_release_id` points to `software_release.id`
+- `workflow_tool_release_id` points to `workflow_tool_release.id`
 - `model_kind` defaults to `modified_arrhenius`
 - `kinetics_source_calculation.role` is one of `reactant_energy`, `product_energy`, `ts_energy`, `freq`, `irc`, `master_equation`, `fit_source`
+- `t0_k`, `tmin_k`, and `tmax_k` must be positive when present
+- `tmin_k` must not exceed `tmax_k` when both are present
+- `degeneracy` must be positive when present
 
 ## 7. Relationship and Membership Tables
 
@@ -611,9 +665,17 @@ Fields:
 - `id`
 - `name`
 - `description`
+- `is_pressure_dependent`
+- `method`
+- `tmin_k`
+- `tmax_k`
+- `pmin_bar`
+- `pmax_bar`
+- `maximum_grain_size_kj_mol`
+- `minimum_grain_count`
 - `literature_id`
-- `software_id`
-- `workflow_tool_id`
+- `software_release_id`
+- `workflow_tool_release_id`
 - `created_by`
 - `created_at`
 
@@ -626,6 +688,9 @@ Notes:
 
 - `network_species.role` may be null in the migration
 - when present, `network_species.role` is one of `well`, `reactant`, `product`, `bath_gas`
+- `is_pressure_dependent` defaults to `true`
+- `software_release_id` points to `software_release.id`
+- `workflow_tool_release_id` points to `workflow_tool_release.id`
 
 ## 8. Important Integrity Rules
 

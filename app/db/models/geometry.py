@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 
 
 class Geometry(Base, TimestampMixin):
+    """Stores a reusable molecular geometry and its serialized XYZ form."""
+
     __tablename__ = "geometry"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -30,6 +32,8 @@ class Geometry(Base, TimestampMixin):
 
 
 class GeometryAtom(Base):
+    """Stores per-atom coordinates for a geometry row."""
+
     __tablename__ = "geometry_atom"
 
     geometry_id: Mapped[int] = mapped_column(

@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
 
 class Author(Base, TimestampMixin):
+    """Stores normalized author identity records for literature references."""
+
     __tablename__ = "author"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

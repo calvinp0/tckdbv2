@@ -14,13 +14,15 @@ from app.db.models.common import MoleculeKind, ReactionRole, StationaryPointKind
 from app.db.types import RDKitMol
 
 if TYPE_CHECKING:
-    from app.db.models.thermo import Thermo
-    from app.db.models.statmech import Statmech
     from app.db.models.calculation import Calculation
     from app.db.models.reaction import ReactionParticipant
+    from app.db.models.statmech import Statmech
+    from app.db.models.thermo import Thermo
 
 
 class Species(Base, TimestampMixin):
+    """Stores stable species identities independent of specific calculations."""
+
     __tablename__ = "species"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -54,6 +56,8 @@ class Species(Base, TimestampMixin):
 
 
 class SpeciesEntry(Base, TimestampMixin, CreatedByMixin):
+    """Stores a stationary-point realization of a species."""
+
     __tablename__ = "species_entry"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
