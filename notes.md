@@ -1,3 +1,5 @@
+<!-- markdownlint-disable -->
+
 Think of a DAG as “the receipts”. You already store **facts** (energies, frequencies, geometries). A DAG stores **how one fact was produced from other facts**.
 
 Most of the time you can live without receipts. The DAG becomes valuable when the workflow is **branchy**, **composite**, or **assembled**.

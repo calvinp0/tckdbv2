@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
     CHAR,
@@ -18,6 +18,9 @@ from sqlalchemy.schema import UniqueConstraint
 from app.db.base import Base, TimestampMixin
 from app.db.models.common import MoleculeKind, StationaryPointKind
 from app.db.types import RDKitMol
+
+if TYPE_CHECKING:
+    from app.db.models.calculation import Calculation
 
 
 class Species(Base, TimestampMixin):
