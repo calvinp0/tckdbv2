@@ -1,0 +1,974 @@
+enum app_user_role {
+  user
+  curator
+  admin
+}
+
+enum artifact_kind {
+  input
+  output_log
+  checkpoint
+  formatted_checkpoint
+  ancillary
+}
+
+enum calc_quality {
+  raw
+  curated
+  rejected
+}
+
+enum calc_type {
+  opt
+  freq
+  sp
+  irc
+  scan
+  neb
+  conf
+}
+
+enum calculation_dependency_role {
+  optimized_from
+  freq_on
+  single_point_on
+  arkane_source
+  irc_start
+  irc_followup
+  scan_parent
+  neb_parent
+}
+
+enum calculation_geometry_role {
+  final
+  initial
+  scan_point
+  irc_forward
+  irc_reverse
+  neb_image
+}
+
+enum conformer_assignment_scope_kind {
+  canonical
+  imported
+  experimental
+  custom
+}
+
+enum conformer_selection_kind {
+  display_default
+  curator_pick
+  lowest_energy
+  benchmark_reference
+  preferred_for_thermo
+  preferred_for_kinetics
+  representative_geometry
+}
+
+enum kinetics_calc_role {
+  reactant_energy
+  product_energy
+  ts_energy
+  freq
+  irc
+  master_equation
+  fit_source
+}
+
+enum kinetics_model_kind {
+  arrhenius
+  modified_arrhenius
+}
+
+enum literature_kind {
+  article
+  book
+  thesis
+  report
+  dataset
+  webpage
+}
+
+enum molecule_kind {
+  molecule
+  pseudo
+}
+
+enum network_species_role {
+  well
+  reactant
+  product
+  bath_gas
+}
+
+enum reaction_role {
+  reactant
+  product
+}
+
+enum rigid_rotor_kind {
+  atom
+  linear
+  spherical_top
+  symmetric_top
+  asymmetric_top
+}
+
+enum scientific_origin_kind {
+  computed
+  experimental
+  estimated
+}
+
+enum species_entry_review_role {
+  curator
+  reviewer
+  validator
+  linker
+}
+
+enum species_entry_state_kind {
+  ground
+  excited
+}
+
+enum species_entry_stereo_kind {
+  unspecified
+  achiral
+  enantiomer
+  diastereomer
+  ez_isomer
+}
+
+enum stationary_point_kind {
+  minimum
+  vdw_complex
+}
+
+enum statmech_calc_role {
+  opt
+  freq
+  sp
+  scan
+  composite
+  imported
+}
+
+enum statmech_treatment_kind {
+  rrho
+  rrho_1d
+  rrho_nd
+  rrho_1d_nd
+  rrho_ad
+  rrao
+}
+
+enum thermo_calc_role {
+  opt
+  freq
+  sp
+  composite
+  imported
+}
+
+enum torsion_treatment_kind {
+  hindered_rotor
+  free_rotor
+  rigid_top
+  hindered_rotor_dos
+}
+
+enum transition_state_entry_status {
+  guess
+  optimized
+  validated
+  rejected
+}
+
+enum transition_state_selection_kind {
+  display_default
+  curator_pick
+  validated_reference
+  preferred_for_kinetics
+  benchmark_reference
+  representative_geometry
+}
+
+Table app_user {
+  id bigint [pk, not null]
+  username text [not null]
+  email text
+  full_name text
+  affiliation text
+  orcid varchar(19)
+  role app_user_role [not null, default: 'user']
+  created_at timestamp [not null, default: 'now']
+
+  indexes {
+    username [unique, name: 'app_user_username_uq']
+    email [unique, name: 'app_user_email_uq']
+    orcid [unique, name: 'app_user_orcid_uq']
+  }
+
+  Note: 'Application user identity used for curation provenance.'
+}
+
+Table author {
+  id bigint [pk, not null]
+  given_name text
+  family_name text [not null]
+  full_name text [not null]
+  orcid varchar(19)
+  created_at timestamp [not null, default: 'now']
+
+  indexes {
+    orcid [unique, name: 'author_orcid_uq']
+  }
+}
+
+Table chem_reaction {
+  id bigint [pk, not null]
+  stoichiometry_hash varchar(64) [unique]
+  reversible bool [not null]
+  created_at timestamp [not null, default: 'now']
+}
+
+Table geometry {
+  id bigint [pk, not null]
+  natoms int [not null]
+  geom_hash varchar(64) [not null, unique]
+  xyz_text text
+  created_at timestamp [not null, default: 'now']
+
+  checks {
+    `natoms >= 1` [name: 'ck_geometry_geometry_natoms_ge_1']
+  }
+
+  Note: 'Stores a reusable molecular geometry and its serialized XYZ form.'
+}
+
+Table level_of_theory {
+  id bigint [pk, not null]
+  method text [not null]
+  basis text
+  aux_basis text
+  dispersion text
+  solvent text
+  solvent_model text
+  keywords text
+  lot_hash varchar(64) [not null]
+  created_at timestamp [not null, default: 'now']
+
+  indexes {
+    lot_hash [unique, name: 'lot_hash_uq']
+  }
+
+  Note: 'Method/basis provenance used by calculations.'
+}
+
+Table literature {
+  id bigint [pk, not null]
+  kind literature_kind [not null]
+  title text [not null]
+  journal text
+  year int
+  volume text
+  issue text
+  pages text
+  doi text
+  isbn text
+  url text
+  publisher text
+  institution text
+  created_at timestamp [not null, default: 'now']
+}
+
+Table software {
+  id bigint [pk, not null]
+  name text [not null]
+  website text
+  description text
+  created_at timestamp [not null, default: 'now']
+
+  indexes {
+    name [unique, name: 'software_name_uq']
+  }
+
+  Note: 'Stable identity of a software package.'
+}
+
+Table species {
+  id bigint [pk, not null]
+  kind molecule_kind [not null]
+  smiles text [not null]
+  inchi_key varchar(27) [not null]
+  charge smallint [not null]
+  multiplicity smallint [not null]
+  created_at timestamp [not null, default: 'now']
+
+  indexes {
+    inchi_key [name: 'species_inchi_key_uq', unique]
+  }
+
+  checks {
+    `multiplicity >= 1` [name: 'ck_species_species_multiplicity_ge_1']
+  }
+
+  Note: 'Store graph-defined species identities without resolved stereo or 3D conformers.'
+}
+
+Table workflow_tool {
+  id bigint [pk, not null]
+  name text [not null]
+  description text
+  created_at timestamp [not null, default: 'now']
+
+  indexes {
+    name [unique, name: 'workflow_tool_name_uq']
+  }
+
+  Note: 'Stable identity for a workflow or orchestration tool.'
+}
+
+Table conformer_assignment_scheme {
+  id bigint [pk, not null]
+  name varchar(128) [not null]
+  version varchar(64) [not null]
+  scope conformer_assignment_scope_kind [not null, default: 'canonical']
+  description text
+  parameters_json jsonb
+  code_commit varchar(64)
+  is_default bool [not null, default: false]
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  indexes {
+    (name, version) [name: 'conformer_assignment_scheme_name_version_uq', unique]
+  }
+
+  Note: 'Store versioned metadata about conformer-assignment or selection logic. This table is optional in the simplified design. It is useful when the application wants to preserve provenance for how conformers were assigned or how selections such as lowest-energy/display-default were determined.'
+}
+
+Table geometry_atom {
+  geometry_id bigint [not null, ref: > geometry.id]
+  atom_index int [not null]
+  element varchar(2) [not null]
+  x double [not null]
+  y double [not null]
+  z double [not null]
+
+  indexes {
+    (geometry_id, atom_index) [pk]
+  }
+
+  Note: 'Stores per-atom coordinates for a geometry row.'
+}
+
+Table literature_author {
+  literature_id bigint [not null, ref: > literature.id]
+  author_id bigint [not null, ref: > author.id]
+  author_order int [not null]
+
+  indexes {
+    (literature_id, author_id) [pk]
+    (literature_id, author_order) [unique, name: 'literature_author_order_uq']
+  }
+}
+
+Table reaction_entry {
+  id bigint [pk, not null]
+  reaction_id bigint [not null, ref: > chem_reaction.id]
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+}
+
+Table reaction_participant {
+  reaction_id bigint [not null, ref: > chem_reaction.id]
+  species_id bigint [not null, ref: > species.id]
+  role reaction_role [not null]
+  stoichiometry smallint [not null]
+
+  indexes {
+    (reaction_id, species_id, role) [pk]
+  }
+
+  checks {
+    `stoichiometry >= 1` [name: 'ck_reaction_participant_reaction_participant_stoichiometry_ge_1']
+  }
+
+  Note: 'Compressed stoichiometric summary for a reaction graph identity. This is not an ordered participant-slot table. Repeated species on one side of a reaction are represented with `stoichiometry`.'
+}
+
+Table software_release {
+  id bigint [pk, not null]
+  software_id bigint [not null, ref: > software.id]
+  version text
+  revision text
+  build text
+  release_date date
+  notes text
+  created_at timestamp [not null, default: 'now']
+
+  indexes {
+    (software_id, version, revision, build) [name: 'software_release_dedupe_uq', unique]
+  }
+
+  Note: 'Exact release metadata for a software package. Dedupe uses `(software_id, version, revision, build)` with PostgreSQL `NULLS NOT DISTINCT`.'
+}
+
+Table species_entry {
+  id bigint [pk, not null]
+  species_id bigint [not null, ref: > species.id]
+  kind stationary_point_kind [not null, default: 'minimum']
+  mol mol
+  unmapped_smiles text
+  stereo_kind species_entry_stereo_kind [not null, default: 'unspecified']
+  stereo_label varchar(64)
+  electronic_state_kind species_entry_state_kind [not null, default: 'ground']
+  electronic_state_label varchar(8)
+  term_symbol_raw varchar(64)
+  term_symbol varchar(64)
+  isotopologue_label varchar(64)
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  indexes {
+    (species_id, stereo_kind, stereo_label, electronic_state_kind, electronic_state_label, term_symbol, isotopologue_label) [name: 'species_entry_identity_uq', unique]
+    species_id [name: 'species_entry_species_idx']
+  }
+
+  Note: 'Store one stereochemically, electronically, or isotopically resolved species form. The resolved identity tuple is unique, with nullable identity components deduped in PostgreSQL using `NULLS NOT DISTINCT`.'
+}
+
+Table workflow_tool_release {
+  id bigint [pk, not null]
+  workflow_tool_id bigint [not null, ref: > workflow_tool.id]
+  version text
+  git_commit varchar(40)
+  release_date date
+  notes text
+  created_at timestamp [not null, default: 'now']
+
+  indexes {
+    (workflow_tool_id, version, git_commit) [name: 'workflow_tool_release_dedupe_uq', unique]
+  }
+
+  Note: 'Exact provenance for a workflow tool code state. Dedupe uses `(workflow_tool_id, version, git_commit)` with PostgreSQL `NULLS NOT DISTINCT`.'
+}
+
+Table conformer_group {
+  id bigint [pk, not null]
+  species_entry_id bigint [not null, ref: > species_entry.id]
+  label varchar(64)
+  note text
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  indexes {
+    species_entry_id [name: 'conformer_group_species_entry_idx']
+    (species_entry_id, label) [name: 'conformer_group_species_entry_label_uq', unique]
+  }
+
+  Note: 'Store one deduplicated conformational basin for a species entry.'
+}
+
+Table kinetics {
+  id bigint [pk, not null]
+  reaction_entry_id bigint [not null, ref: > reaction_entry.id]
+  scientific_origin scientific_origin_kind [not null]
+  model_kind kinetics_model_kind [not null, default: 'modified_arrhenius']
+  literature_id bigint [ref: > literature.id]
+  workflow_tool_release_id bigint [ref: > workflow_tool_release.id]
+  software_release_id bigint [ref: > software_release.id]
+  a double
+  a_units text
+  n double
+  ea_kj_mol double
+  tmin_k double
+  tmax_k double
+  degeneracy double
+  tunneling_model text
+  note text
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  checks {
+    `tmax_k IS NULL OR tmax_k > 0` [name: 'ck_kinetics_kinetics_tmax_k_gt_0']
+    `tmin_k IS NULL OR tmin_k > 0` [name: 'ck_kinetics_kinetics_tmin_k_gt_0']
+    `tmin_k IS NULL OR tmax_k IS NULL OR tmin_k <= tmax_k` [name: 'ck_kinetics_kinetics_tmin_le_tmax']
+  }
+
+  Note: 'Kinetics records attached to a reaction entry.'
+}
+
+Table network {
+  id bigint [pk, not null]
+  name text
+  description text
+  literature_id bigint [ref: > literature.id]
+  software_release_id bigint [ref: > software_release.id]
+  workflow_tool_release_id bigint [ref: > workflow_tool_release.id]
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  Note: 'Reaction network metadata.'
+}
+
+Table reaction_entry_structure_participant {
+  id bigint [pk, not null]
+  reaction_entry_id bigint [not null, ref: > reaction_entry.id]
+  species_entry_id bigint [not null, ref: > species_entry.id]
+  role reaction_role [not null]
+  participant_index int [not null]
+  note text
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  indexes {
+    (reaction_entry_id, role, participant_index) [unique, name: 'reaction_entry_structure_participant_order_uq']
+  }
+}
+
+Table species_entry_review {
+  id bigint [pk, not null]
+  species_entry_id bigint [not null, ref: > species_entry.id]
+  user_id bigint [not null, ref: > app_user.id]
+  role species_entry_review_role [not null]
+  note text
+  created_at timestamp [not null, default: 'now']
+
+  indexes {
+    (species_entry_id, user_id, role) [name: 'species_entry_review_uq', unique]
+  }
+
+  Note: 'Store explicit human review or curation events for species entries.'
+}
+
+Table statmech {
+  id bigint [pk, not null]
+  species_entry_id bigint [not null, ref: > species_entry.id]
+  scientific_origin scientific_origin_kind [not null]
+  literature_id bigint [ref: > literature.id]
+  workflow_tool_release_id bigint [ref: > workflow_tool_release.id]
+  software_release_id bigint [ref: > software_release.id]
+  external_symmetry smallint
+  point_group text
+  is_linear bool
+  rigid_rotor_kind rigid_rotor_kind
+  statmech_treatment statmech_treatment_kind
+  freq_scale_factor double
+  uses_projected_frequencies bool
+  note text
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  indexes {
+    (species_entry_id, scientific_origin, workflow_tool_release_id, software_release_id, statmech_treatment) [name: 'statmech_dedupe_uq', unique]
+  }
+
+  checks {
+    `external_symmetry IS NULL OR external_symmetry >= 1` [name: 'ck_statmech_statmech_external_symmetry_ge_1']
+  }
+
+  Note: 'Statistical mechanics interpretation layer for a species entry. Dedupe uses the provenance/treatment tuple with PostgreSQL `NULLS NOT DISTINCT`.'
+}
+
+Table thermo {
+  id bigint [pk, not null]
+  species_entry_id bigint [not null, ref: > species_entry.id]
+  scientific_origin scientific_origin_kind [not null]
+  literature_id bigint [ref: > literature.id]
+  workflow_tool_release_id bigint [ref: > workflow_tool_release.id]
+  software_release_id bigint [ref: > software_release.id]
+  h298_kj_mol double
+  s298_j_mol_k double
+  note text
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  indexes {
+    (species_entry_id, scientific_origin, workflow_tool_release_id, software_release_id) [name: 'thermo_dedupe_uq', unique]
+  }
+
+  Note: 'Thermochemistry records for a species entry. Dedupe uses the provenance tuple with PostgreSQL `NULLS NOT DISTINCT`.'
+}
+
+Table transition_state {
+  id bigint [pk, not null]
+  reaction_entry_id bigint [not null, ref: > reaction_entry.id]
+  label text
+  note text
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  Note: 'Reaction-channel-level transition-state concept. This groups candidate saddle-point structures that belong to the same reaction-channel interpretation.'
+}
+
+Table transport {
+  id bigint [pk, not null]
+  species_entry_id bigint [not null, ref: > species_entry.id]
+  scientific_origin scientific_origin_kind [not null]
+  literature_id bigint [ref: > literature.id]
+  software_release_id bigint [ref: > software_release.id]
+  workflow_tool_release_id bigint [ref: > workflow_tool_release.id]
+  sigma_angstrom double
+  epsilon_over_k_k double
+  dipole_debye double
+  polarizability_angstrom3 double
+  rotational_relaxation double
+  note text
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  checks {
+    `epsilon_over_k_k IS NULL OR epsilon_over_k_k > 0` [name: 'ck_transport_transport_epsilon_over_k_k_gt_0']
+    `rotational_relaxation IS NULL OR rotational_relaxation >= 0` [name: 'ck_transport_transport_rotational_relaxation_ge_0']
+    `sigma_angstrom IS NULL OR sigma_angstrom > 0` [name: 'ck_transport_transport_sigma_angstrom_gt_0']
+  }
+
+  Note: 'Transport properties attached to a species entry.'
+}
+
+Table conformer_selection {
+  id bigint [pk, not null]
+  conformer_group_id bigint [not null, ref: > conformer_group.id]
+  assignment_scheme_id bigint [ref: > conformer_assignment_scheme.id]
+  selection_kind conformer_selection_kind [not null]
+  note text
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  indexes {
+    (conformer_group_id, assignment_scheme_id, selection_kind) [name: 'conformer_selection_kind_uq', unique]
+  }
+
+  Note: 'Store explicit workflow, curation, or UI selections for conformer groups. `NULL` assignment-scheme references are treated as identical for dedupe.'
+}
+
+Table network_reaction {
+  network_id bigint [not null, ref: > network.id]
+  reaction_entry_id bigint [not null, ref: > reaction_entry.id]
+
+  indexes {
+    (network_id, reaction_entry_id) [pk]
+  }
+
+  Note: 'Links a network to a reaction entry.'
+}
+
+Table network_species {
+  network_id bigint [not null, ref: > network.id]
+  species_entry_id bigint [not null, ref: > species_entry.id]
+  role network_species_role [not null]
+
+  indexes {
+    (network_id, species_entry_id, role) [pk]
+  }
+
+  Note: 'Links a network to a species entry with a role.'
+}
+
+Table thermo_nasa {
+  thermo_id bigint [pk, not null, ref: > thermo.id]
+  t_low double
+  t_mid double
+  t_high double
+  a1 double
+  a2 double
+  a3 double
+  a4 double
+  a5 double
+  a6 double
+  a7 double
+  b1 double
+  b2 double
+  b3 double
+  b4 double
+  b5 double
+  b6 double
+  b7 double
+
+  checks {
+    `t_mid IS NULL OR t_high IS NULL OR t_high > t_mid` [name: 'ck_thermo_nasa_thermo_nasa_t_high_gt_t_mid']
+    `t_low IS NULL OR t_low > 0` [name: 'ck_thermo_nasa_thermo_nasa_t_low_gt_0']
+    `t_low IS NULL OR t_mid IS NULL OR t_mid > t_low` [name: 'ck_thermo_nasa_thermo_nasa_t_mid_gt_t_low']
+    `(
+                t_low IS NULL
+                AND t_mid IS NULL
+                AND t_high IS NULL
+            )
+            OR
+            (
+                t_low IS NOT NULL
+                AND t_mid IS NOT NULL
+                AND t_high IS NOT NULL
+            )` [name: 'ck_thermo_nasa_thermo_nasa_temperature_bounds_all_or_none']
+  }
+
+  Note: 'NASA polynomial coefficients for a thermo record.'
+}
+
+Table thermo_point {
+  thermo_id bigint [not null, ref: > thermo.id]
+  temperature_k double [not null]
+  h_kj_mol double
+  s_j_mol_k double
+  g_kj_mol double
+
+  indexes {
+    (thermo_id, temperature_k) [pk]
+  }
+
+  Note: 'Tabulated thermo values at a specific temperature.'
+}
+
+Table transition_state_entry {
+  id bigint [pk, not null]
+  transition_state_id bigint [not null, ref: > transition_state.id]
+  charge smallint [not null]
+  multiplicity smallint [not null]
+  mol mol
+  unmapped_smiles text
+  status transition_state_entry_status [not null, default: 'optimized']
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  indexes {
+    (id, transition_state_id) [unique, name: 'transition_state_entry_id_transition_state_id_uq']
+  }
+
+  checks {
+    `multiplicity >= 1` [name: 'ck_transition_state_entry_transition_state_entry_multiplicity_ge_1']
+  }
+
+  Note: 'One candidate transition-state geometry family member under a TS concept. Calculations refine or validate this candidate, and selection rows can mark which entry is preferred for kinetics or display.'
+}
+
+Table calculation {
+  id bigint [pk, not null]
+  type calc_type [not null]
+  quality calc_quality [not null, default: 'raw']
+  species_entry_id bigint [ref: > species_entry.id]
+  transition_state_entry_id bigint [ref: > transition_state_entry.id]
+  software_release_id bigint [ref: > software_release.id]
+  workflow_tool_release_id bigint [ref: > workflow_tool_release.id]
+  lot_id bigint [ref: > level_of_theory.id]
+  literature_id bigint [ref: > literature.id]
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  checks {
+    `(
+                    transition_state_entry_id IS NOT NULL
+                    AND species_entry_id IS NULL
+                )
+                OR
+                (
+                    transition_state_entry_id IS NULL
+                    AND species_entry_id IS NOT NULL
+                )` [name: 'ck_calculation_exactly_one_owner']
+  }
+
+  Note: 'Computational record owned by exactly one species or transition-state entry.'
+}
+
+Table transition_state_selection {
+  id bigint [pk, not null]
+  transition_state_id bigint [not null, ref: > transition_state.id]
+  transition_state_entry_id bigint [not null, ref: > transition_state_entry.id]
+  selection_kind transition_state_selection_kind [not null]
+  note text
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  indexes {
+    (transition_state_id, selection_kind) [unique, name: 'transition_state_selection_kind_uq']
+  }
+
+  Note: 'Selection and curation layer for transition-state entries. The selected entry must belong to the same transition-state concept as the `transition_state_id` on this row.'
+}
+
+Table calc_freq_result {
+  calculation_id bigint [pk, not null, ref: > calculation.id]
+  n_imag int
+  imag_freq_cm1 double
+  zpe_hartree double
+}
+
+Table calc_opt_result {
+  calculation_id bigint [pk, not null, ref: > calculation.id]
+  converged bool
+  n_steps int
+  final_energy_hartree double
+
+  checks {
+    `n_steps IS NULL OR n_steps >= 0` [name: 'ck_calc_opt_result_calc_opt_result_n_steps_ge_0']
+  }
+}
+
+Table calc_sp_result {
+  calculation_id bigint [pk, not null, ref: > calculation.id]
+  electronic_energy_hartree double
+}
+
+Table calculation_artifact {
+  id bigint [pk, not null]
+  calculation_id bigint [not null, ref: > calculation.id]
+  kind artifact_kind [not null]
+  uri text [not null]
+  sha256 varchar(64)
+  bytes bigint
+  created_at timestamp [not null, default: 'now']
+}
+
+Table calculation_dependency {
+  parent_calculation_id bigint [not null, ref: > calculation.id]
+  child_calculation_id bigint [not null, ref: > calculation.id]
+  dependency_role calculation_dependency_role [not null]
+
+  indexes {
+    (parent_calculation_id, child_calculation_id) [pk]
+    child_calculation_id [name: 'calculation_dependency_child_freq_on_uq', note: 'Partial index WHERE dependency_role = \'freq_on\'']
+    child_calculation_id [name: 'calculation_dependency_child_neb_parent_uq', note: 'Partial index WHERE dependency_role = \'neb_parent\'']
+    child_calculation_id [name: 'calculation_dependency_child_optimized_from_uq', note: 'Partial index WHERE dependency_role = \'optimized_from\'']
+    child_calculation_id [name: 'calculation_dependency_child_scan_parent_uq', note: 'Partial index WHERE dependency_role = \'scan_parent\'']
+    child_calculation_id [name: 'calculation_dependency_child_single_point_on_uq', note: 'Partial index WHERE dependency_role = \'single_point_on\'']
+  }
+
+  checks {
+    `parent_calculation_id <> child_calculation_id` [name: 'ck_calculation_dependency_calculation_dependency_not_self']
+  }
+
+  Note: 'Directed dependency edge between two calculations. Self-edges are forbidden in the schema. Stronger role-specific parent-count rules or full DAG validation belong in application logic unless the policy is narrowed enough for partial unique indexes. Selected roles currently enforce at most one parent per child: `optimized_from`, `freq_on`, `single_point_on`, `scan_parent`, and `neb_parent`.'
+}
+
+Table calculation_input_geometry {
+  calculation_id bigint [not null, ref: > calculation.id]
+  geometry_id bigint [not null, ref: > geometry.id]
+  input_order int [not null, default: 1]
+
+  indexes {
+    (calculation_id, input_order) [pk]
+    (calculation_id, geometry_id) [unique, name: 'uq_calculation_input_geometry']
+  }
+
+  checks {
+    `input_order >= 1` [name: 'ck_calculation_input_geometry_calculation_input_order_ge_1']
+  }
+
+  Note: 'Ordered input-geometry link table for a calculation.'
+}
+
+Table calculation_output_geometry {
+  calculation_id bigint [not null, ref: > calculation.id]
+  geometry_id bigint [not null, ref: > geometry.id]
+  output_order int [not null, default: 1]
+  role calculation_geometry_role
+
+  indexes {
+    (calculation_id, output_order) [pk]
+    (calculation_id, geometry_id) [unique, name: 'uq_calculation_output_geometry_calculation_geometry']
+  }
+
+  checks {
+    `output_order >= 1` [name: 'ck_calculation_output_geometry_calculation_output_order_ge_1']
+  }
+}
+
+Table conformer_observation {
+  id bigint [pk, not null]
+  conformer_group_id bigint [not null, ref: > conformer_group.id]
+  calculation_id bigint [not null, ref: > calculation.id]
+  assignment_scheme_id bigint [ref: > conformer_assignment_scheme.id]
+  scientific_origin scientific_origin_kind [not null, default: 'computed']
+  note text
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  indexes {
+    calculation_id [name: 'conformer_calculation_uq', unique]
+    conformer_group_id [name: 'conformer_group_idx']
+  }
+
+  Note: 'Store one uploaded or imported conformer observation assigned to a group.'
+}
+
+Table kinetics_source_calculation {
+  kinetics_id bigint [not null, ref: > kinetics.id]
+  calculation_id bigint [not null, ref: > calculation.id]
+  role kinetics_calc_role [not null]
+
+  indexes {
+    (kinetics_id, calculation_id, role) [pk]
+  }
+
+  Note: 'Links kinetics records to supporting calculations by role.'
+}
+
+Table statmech_source_calculation {
+  statmech_id bigint [not null, ref: > statmech.id]
+  calculation_id bigint [not null, ref: > calculation.id]
+  role statmech_calc_role [not null]
+
+  indexes {
+    (statmech_id, calculation_id, role) [pk]
+  }
+
+  Note: 'Links statmech records to source calculations by role.'
+}
+
+Table statmech_torsion {
+  id bigint [pk, not null]
+  statmech_id bigint [not null, ref: > statmech.id]
+  torsion_index int [not null]
+  symmetry_number smallint
+  treatment_kind torsion_treatment_kind
+  dimension int [not null, default: 1]
+  top_description text
+  invalidated_reason text
+  note text
+  source_scan_calculation_id bigint [ref: > calculation.id]
+
+  checks {
+    `dimension >= 1` [name: 'ck_statmech_torsion_statmech_torsion_dimension_ge_1']
+  }
+
+  Note: 'Stores one torsion associated with a statmech record.'
+}
+
+Table thermo_source_calculation {
+  thermo_id bigint [not null, ref: > thermo.id]
+  calculation_id bigint [not null, ref: > calculation.id]
+  role thermo_calc_role [not null]
+
+  indexes {
+    (thermo_id, calculation_id, role) [pk]
+  }
+
+  Note: 'Links thermo records to supporting calculations by role.'
+}
+
+Table statmech_torsion_definition {
+  torsion_id bigint [not null, ref: > statmech_torsion.id]
+  coordinate_index int [not null]
+  atom1_index int [not null]
+  atom2_index int [not null]
+  atom3_index int [not null]
+  atom4_index int [not null]
+
+  indexes {
+    (torsion_id, coordinate_index) [pk]
+  }
+
+  checks {
+    `atom1_index >= 1` [name: 'ck_statmech_torsion_definition_statmech_torsion_atom1_ge_1']
+    `atom2_index >= 1` [name: 'ck_statmech_torsion_definition_statmech_torsion_atom2_ge_1']
+    `atom3_index >= 1` [name: 'ck_statmech_torsion_definition_statmech_torsion_atom3_ge_1']
+    `atom4_index >= 1` [name: 'ck_statmech_torsion_definition_statmech_torsion_atom4_ge_1']
+    `coordinate_index >= 1` [name: 'ck_statmech_torsion_definition_statmech_torsion_coord_index_ge_1']
+  }
+
+  Note: 'Atom indices for a torsional coordinate.'
+}
+
+Ref fk_transition_state_selection_entry_with_parent: transition_state_selection.(transition_state_entry_id, transition_state_id) > transition_state_entry.(id, transition_state_id)

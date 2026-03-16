@@ -2,12 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, UniqueConstraint
-from sqlalchemy.orm import (
-    Mapped,
-    mapped_column,
-    relationship,
-)
+from sqlalchemy import ForeignKey, Integer, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -17,26 +13,25 @@ if TYPE_CHECKING:
 
 
 class LiteratureAuthor(Base):
-    """Links literature records to authors in citation order."""
-
     __tablename__ = "literature_author"
 
     literature_id: Mapped[int] = mapped_column(
         ForeignKey("literature.id", deferrable=True, initially="IMMEDIATE"),
         primary_key=True,
     )
-
     author_id: Mapped[int] = mapped_column(
         ForeignKey("author.id", deferrable=True, initially="IMMEDIATE"),
         primary_key=True,
     )
-
     author_order: Mapped[int] = mapped_column(Integer, nullable=False)
 
     literature: Mapped["Literature"] = relationship(back_populates="authors")
     author: Mapped["Author"] = relationship(back_populates="literature_links")
 
     __table_args__ = (
-        UniqueConstraint("literature_id", "author_order"),
-        CheckConstraint("author_order > 0", name="author_order_positive"),
+        UniqueConstraint(
+            "literature_id",
+            "author_order",
+            name="literature_author_order_uq",
+        ),
     )

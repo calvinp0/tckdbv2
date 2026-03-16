@@ -5,7 +5,7 @@ This document classifies each table by four questions:
 - Identity: what the entity is
 - Result: scientific/computational values produced about it
 - Provenance: where it came from, who made it, what generated it
-- Curation: chosen/preferred/status/quality fields
+- Curation: review, selection, status, and quality fields
 
 The goal is not to repeat SQL types or constraints. The goal is to make the semantic role of each field clear.
 
@@ -18,11 +18,11 @@ Migration details that materially affect semantics:
 - `calculation_output_geometry.role` uses the `calc_geom_role` enum type
 - `calculation_dependency.dependency_role` uses the `calc_dependency_role` enum type
 - `thermo.model_kind` uses the `thermo_model_kind` enum type
-- the calculation XOR ownership check is named `ck_calculation_exactly_one_owner`
+- the calculation ownership check is named `ck_calculation_exactly_one_owner`
 - `kinetics.model_kind` defaults to `modified_arrhenius`
 - `app_user.role` defaults to `user`
 - `network_species.role` is nullable in the migration
-- `reaction_entry.preferred_ts_entry_id` is an immediate FK, unlike the deferred preferred calculation pointers
+- `reaction_entry.preferred_ts_entry_id` is an immediate FK
 
 ## 1. species
 
@@ -55,6 +55,13 @@ Migration details that materially affect semantics:
 - `species_id`
 - `kind`
 - `mol`
+- `unmapped_smiles`
+- `stereo_kind`
+- `stereo_label`
+- `electronic_state_kind`
+- `electronic_state_label`
+- `term_symbol`
+- `isotopologue_label`
 
 ### Result
 
@@ -62,14 +69,13 @@ Migration details that materially affect semantics:
 
 ### Provenance
 
+- `term_symbol_raw`
 - `created_by`
 - `created_at`
 
 ### Curation
 
-- `preferred_calculation_id`
-- `preferred_thermo_id`
-- `preferred_statmech_id`
+- None
 
 ## 3. transport
 
@@ -99,7 +105,7 @@ Migration details that materially affect semantics:
 
 - `note`
 
-## 4. species_entry_contributor
+## 4. species_entry_review
 
 ### Identity
 
@@ -113,11 +119,13 @@ Migration details that materially affect semantics:
 
 ### Provenance
 
+- `user_id`
 - `created_at`
 
 ### Curation
 
 - `role`
+- `note`
 
 ## 5. geometry
 
@@ -355,6 +363,7 @@ Note:
 - `id`
 - `type`
 - `species_entry_id`
+- `conformer_id`
 - `transition_state_entry_id`
 
 ### Result
@@ -378,7 +387,8 @@ Note:
 
 - `quality` defaults to `raw`
 - the enum type name is `calculation_quality`
-- the XOR ownership check is named `ck_calculation_exactly_one_owner`
+- the ownership check is named `ck_calculation_exactly_one_owner`
+- species-side calculations may be entry-level, conformer-level, or both
 
 ## 16. calculation_output_geometry
 
@@ -653,7 +663,6 @@ Note:
 
 ### Result
 
-- `cp_j_mol_k`
 - `h_kj_mol`
 - `s_j_mol_k`
 - `g_kj_mol`
@@ -1096,4 +1105,6 @@ Note:
 - Identity is concentrated in `species`, `chem_reaction`, `transition_state`, `geometry`, and the bibliographic/reference tables.
 - Result values are intentionally pushed into typed result tables such as `calc_sp_result`, `calc_opt_result`, `calc_freq_result`, `calc_freq_mode`, `calc_hessian`, `calc_scan_result`, `thermo`, `thermo_point`, `thermo_nasa`, `statmech`, and `kinetics`.
 - Provenance is carried mainly through `created_by`, `created_at`, `scientific_origin`, `literature_id`, software and workflow foreign keys, and link tables back to `calculation`.
-- Curation currently appears as preferred pointers and qualitative status fields: `preferred_calculation_id`, `preferred_ts_entry_id`, `status`, `quality`, and role-like labeling fields in link tables.
+- Curation currently appears as review roles, conformer-selection tags, `preferred_ts_entry_id`, `status`, `quality`, and role-like labeling fields in link tables.
+- Conformer-selection tags can be scoped by assignment scheme, so curation and selection logic can evolve together without rewriting conformer identity.
+- `calculation.conformer_id` allows species-side computational provenance to attach directly to a conformer when entry-level ownership is too coarse.

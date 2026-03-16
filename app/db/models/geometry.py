@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import CHAR, BigInteger, ForeignKey, Integer, Text
+from sqlalchemy import CHAR, BigInteger, CheckConstraint, ForeignKey, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
-    from app.db.models.calculation import CalculationOutputGeometry
+    from app.db.models.calculation import (
+        CalculationInputGeometry,
+        CalculationOutputGeometry,
+    )
 
 
 class Geometry(Base, TimestampMixin):
@@ -29,6 +32,11 @@ class Geometry(Base, TimestampMixin):
     calculation_outputs: Mapped[list["CalculationOutputGeometry"]] = relationship(
         back_populates="geometry",
     )
+    calculation_inputs: Mapped[list["CalculationInputGeometry"]] = relationship(
+        back_populates="geometry",
+    )
+
+    __table_args__ = (CheckConstraint("natoms >= 1", name="geometry_natoms_ge_1"),)
 
 
 class GeometryAtom(Base):
@@ -48,3 +56,7 @@ class GeometryAtom(Base):
     z: Mapped[float] = mapped_column(nullable=False)
 
     geometry: Mapped[Geometry] = relationship(back_populates="atoms")
+
+    __table_args__ = (
+        CheckConstraint("atom_index >= 1", name="geometry_atom_index_ge_1"),
+    )

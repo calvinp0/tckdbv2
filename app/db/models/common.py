@@ -9,9 +9,18 @@ class MoleculeKind(str, Enum):
 
 
 class StationaryPointKind(str, Enum):
-    conformer = "conformer"
     minimum = "minimum"
     vdw_complex = "vdw_complex"
+
+
+class ConformerSelectionKind(str, Enum):
+    display_default = "display_default"
+    curator_pick = "curator_pick"
+    lowest_energy = "lowest_energy"
+    benchmark_reference = "benchmark_reference"
+    preferred_for_thermo = "preferred_for_thermo"
+    preferred_for_kinetics = "preferred_for_kinetics"
+    representative_geometry = "representative_geometry"
 
 
 class ScientificOriginKind(str, Enum):
@@ -20,11 +29,51 @@ class ScientificOriginKind(str, Enum):
     estimated = "estimated"
 
 
-class ContributorRole(str, Enum):
-    submitted = "submitted"
-    curated = "curated"
-    computed = "computed"
-    linked = "linked"
+class SpeciesEntryReviewRole(str, Enum):
+    curator = "curator"
+    reviewer = "reviewer"
+    validator = "validator"
+    linker = "linker"
+
+
+class ConformerAssignmentScopeKind(str, Enum):
+    canonical = "canonical"
+    imported = "imported"
+    experimental = "experimental"
+    custom = "custom"
+
+
+class RigidRotorKind(str, Enum):
+    atom = "atom"
+    linear = "linear"
+    spherical_top = "spherical_top"
+    symmetric_top = "symmetric_top"
+    asymmetric_top = "asymmetric_top"
+
+
+class StatmechTreatmentKind(str, Enum):
+    rrho = "rrho"
+    rrho_1d = "rrho_1d"
+    rrho_nd = "rrho_nd"
+    rrho_1d_nd = "rrho_1d_nd"
+    rrho_ad = "rrho_ad"
+    rrao = "rrao"
+
+
+class StatmechCalculationRole(str, Enum):
+    opt = "opt"
+    freq = "freq"
+    sp = "sp"
+    scan = "scan"
+    composite = "composite"
+    imported = "imported"
+
+
+class TorsionTreatmentKind(str, Enum):
+    hindered_rotor = "hindered_rotor"
+    free_rotor = "free_rotor"
+    rigid_top = "rigid_top"
+    hindered_rotor_dos = "hindered_rotor_dos"
 
 
 class ReactionRole(str, Enum):
@@ -49,9 +98,8 @@ class CalculationQuality(str, Enum):
 
 
 class CalculationGeometryRole(str, Enum):
-    initial = "initial"
     final = "final"
-    intermediate = "intermediate"
+    initial = "initial"
     scan_point = "scan_point"
     irc_forward = "irc_forward"
     irc_reverse = "irc_reverse"
@@ -69,31 +117,12 @@ class CalculationDependencyRole(str, Enum):
     neb_parent = "neb_parent"
 
 
-class CalculationScanKind(str, Enum):
-    torsion = "torsion"
-    bond = "bond"
-    angle = "angle"
-    multi_torsion = "multi_torsion"
-
-
-class CalculationScanCoordinateKind(str, Enum):
-    torsion = "torsion"
-    bond = "bond"
-    angle = "angle"
-
-
 class ArtifactKind(str, Enum):
     input = "input"
     output_log = "output_log"
     checkpoint = "checkpoint"
     formatted_checkpoint = "formatted_checkpoint"
     ancillary = "ancillary"
-
-
-class AUnits(str, Enum):
-    cm3_mol_s = "cm3_mol_s"
-    cm3_molecule_s = "cm3_molecule_s"
-    s_1 = "s_1"
 
 
 class TransitionStateEntryStatus(str, Enum):
@@ -103,12 +132,13 @@ class TransitionStateEntryStatus(str, Enum):
     rejected = "rejected"
 
 
-class ThermoModelKind(str, Enum):
-    nasa = "nasa"
-    shomate = "shomate"
-    tabulated = "tabulated"
-    statmech = "statmech"
-    experimental = "experimental"
+class TransitionStateSelectionKind(str, Enum):
+    display_default = "display_default"
+    curator_pick = "curator_pick"
+    validated_reference = "validated_reference"
+    preferred_for_kinetics = "preferred_for_kinetics"
+    benchmark_reference = "benchmark_reference"
+    representative_geometry = "representative_geometry"
 
 
 class ThermoCalculationRole(str, Enum):
@@ -122,10 +152,6 @@ class ThermoCalculationRole(str, Enum):
 class KineticsModelKind(str, Enum):
     arrhenius = "arrhenius"
     modified_arrhenius = "modified_arrhenius"
-    chebyshev = "chebyshev"
-    plog = "plog"
-    falloff = "falloff"
-    tabulated = "tabulated"
 
 
 class KineticsCalculationRole(str, Enum):
@@ -136,13 +162,6 @@ class KineticsCalculationRole(str, Enum):
     irc = "irc"
     master_equation = "master_equation"
     fit_source = "fit_source"
-
-
-class TunnelingModelKind(str, Enum):
-    none = "none"
-    wigner = "wigner"
-    eckart = "eckart"
-    skodje_truhlar = "skodje_truhlar"
 
 
 class NetworkSpeciesRole(str, Enum):
@@ -165,3 +184,16 @@ class AppUserRole(str, Enum):
     user = "user"
     curator = "curator"
     admin = "admin"
+
+
+class SpeciesEntryStereoKind(str, Enum):
+    unspecified = "unspecified"
+    achiral = "achiral"
+    enantiomer = "enantiomer"
+    diastereomer = "diastereomer"
+    ez_isomer = "ez_isomer"
+
+
+class SpeciesEntryStateKind(str, Enum):
+    ground = "ground"
+    excited = "excited"

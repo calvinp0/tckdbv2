@@ -1,16 +1,33 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import CHAR, BigInteger, ForeignKey, SmallInteger, Text
 from sqlalchemy import (
-    Enum as SAEnum,
+    CHAR,
+    BigInteger,
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    SmallInteger,
+    String,
+    Text,
 )
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.schema import UniqueConstraint
 
 from app.db.base import Base, CreatedByMixin, TimestampMixin
-from app.db.models.common import MoleculeKind, ReactionRole, StationaryPointKind
+from app.db.models.common import (
+    ConformerAssignmentScopeKind,
+    ConformerSelectionKind,
+    MoleculeKind,
+    ReactionRole,
+    ScientificOriginKind,
+    SpeciesEntryReviewRole,
+    SpeciesEntryStateKind,
+    SpeciesEntryStereoKind,
+    StationaryPointKind,
+)
 from app.db.types import RDKitMol
 
 if TYPE_CHECKING:
@@ -18,16 +35,18 @@ if TYPE_CHECKING:
     from app.db.models.reaction import ReactionParticipant
     from app.db.models.statmech import Statmech
     from app.db.models.thermo import Thermo
+    from app.db.models.transport import Transport
 
 
 class Species(Base, TimestampMixin):
-    """Stores stable species identities independent of specific calculations."""
+    """Store graph-defined species identities without resolved stereo or 3D conformers."""
 
     __tablename__ = "species"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     kind: Mapped[MoleculeKind] = mapped_column(
-        SAEnum(MoleculeKind, name="molecule_kind"), nullable=False
+        SAEnum(MoleculeKind, name="molecule_kind"),
+        nullable=False,
     )
     smiles: Mapped[str] = mapped_column(Text, nullable=False)
     inchi_key: Mapped[str] = mapped_column(CHAR(27), nullable=False)
@@ -35,87 +54,370 @@ class Species(Base, TimestampMixin):
     multiplicity: Mapped[int] = mapped_column(SmallInteger, nullable=False)
 
     entries: Mapped[list["SpeciesEntry"]] = relationship(
-        back_populates="species", cascade="all, delete-orphan"
+        back_populates="species",
+        cascade="save-update, merge",
     )
+
     reaction_participants: Mapped[list["ReactionParticipant"]] = relationship(
         back_populates="species",
     )
-    __table_args__ = UniqueConstraint("inchi_key")
+
+    __table_args__ = (
+        Index("species_inchi_key_uq", "inchi_key", unique=True),
+        CheckConstraint("multiplicity >= 1", name="species_multiplicity_ge_1"),
+    )
 
     @property
     def as_reactant_in(self) -> list["ReactionParticipant"]:
+        """Return reaction-participant rows where this species is a reactant."""
         return [
             rp for rp in self.reaction_participants if rp.role == ReactionRole.reactant
         ]
 
     @property
     def as_product_in(self) -> list["ReactionParticipant"]:
+        """Return reaction-participant rows where this species is a product."""
         return [
             rp for rp in self.reaction_participants if rp.role == ReactionRole.product
         ]
 
 
 class SpeciesEntry(Base, TimestampMixin, CreatedByMixin):
-    """Stores a stationary-point realization of a species."""
+    """Store one stereochemically, electronically, or isotopically resolved species form.
+
+    The resolved identity tuple is unique, with nullable identity components
+    deduped in PostgreSQL using `NULLS NOT DISTINCT`.
+    """
 
     __tablename__ = "species_entry"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+
     species_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("species.id", deferrable=True, initially="IMMEDIATE"),
         nullable=False,
     )
+
     kind: Mapped[StationaryPointKind] = mapped_column(
-        SAEnum(StationaryPointKind, name="stationary_point_kind"), nullable=False
+        SAEnum(StationaryPointKind, name="stationary_point_kind"),
+        nullable=False,
+        default=StationaryPointKind.minimum,
+        server_default=StationaryPointKind.minimum.value,
     )
+
     mol: Mapped[Optional[str]] = mapped_column(RDKitMol(), nullable=True)
-    preferred_calculation_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger,
-        ForeignKey("calculation.id", deferrable=True, initially="DEFERRED"),
+    unmapped_smiles: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    stereo_kind: Mapped[SpeciesEntryStereoKind] = mapped_column(
+        SAEnum(SpeciesEntryStereoKind, name="species_entry_stereo_kind"),
+        nullable=False,
+        default=SpeciesEntryStereoKind.unspecified,
+        server_default=SpeciesEntryStereoKind.unspecified.value,
+    )
+    stereo_label: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+    electronic_state_kind: Mapped[SpeciesEntryStateKind] = mapped_column(
+        SAEnum(SpeciesEntryStateKind, name="species_entry_state_kind"),
+        nullable=False,
+        default=SpeciesEntryStateKind.ground,
+        server_default=SpeciesEntryStateKind.ground.value,
+    )
+    electronic_state_label: Mapped[Optional[str]] = mapped_column(
+        String(8),
         nullable=True,
     )
-
-    preferred_thermo_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger,
-        ForeignKey("thermo.id", deferrable=True, initially="DEFERRED"),
+    term_symbol_raw: Mapped[Optional[str]] = mapped_column(
+        String(64),
         nullable=True,
     )
-
-    preferred_statmech_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger,
-        ForeignKey("statmech.id", deferrable=True, initially="DEFERRED"),
+    term_symbol: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    isotopologue_label: Mapped[Optional[str]] = mapped_column(
+        String(64),
         nullable=True,
     )
 
     species: Mapped["Species"] = relationship(back_populates="entries")
 
-    calculations: Mapped[list["Calculation"]] = relationship(
-        back_populates="species_entry", foreign_keys="Calculation.species_entry_id"
+    conformer_groups: Mapped[list["ConformerGroup"]] = relationship(
+        back_populates="species_entry",
+        cascade="save-update, merge",
     )
 
-    preferred_calculation: Mapped[Optional["Calculation"]] = relationship(
-        foreign_keys=[preferred_calculation_id], post_update=True
+    calculations: Mapped[list["Calculation"]] = relationship(
+        back_populates="species_entry",
+        foreign_keys="Calculation.species_entry_id",
     )
 
     thermo_records: Mapped[list["Thermo"]] = relationship(
         back_populates="species_entry",
-        cascade="all, delete-orphan",
+        cascade="save-update, merge",
         foreign_keys="Thermo.species_entry_id",
-    )
-
-    preferred_thermo: Mapped[Optional["Thermo"]] = relationship(
-        foreign_keys=[preferred_thermo_id],
-        post_update=True,
     )
 
     statmech_records: Mapped[list["Statmech"]] = relationship(
         back_populates="species_entry",
-        cascade="all, delete-orphan",
+        cascade="save-update, merge",
         foreign_keys="Statmech.species_entry_id",
     )
+    transport_records: Mapped[list["Transport"]] = relationship(
+        back_populates="species_entry",
+        cascade="save-update, merge",
+        foreign_keys="Transport.species_entry_id",
+    )
 
-    preferred_statmech: Mapped[Optional["Statmech"]] = relationship(
-        foreign_keys=[preferred_statmech_id],
-        post_update=True,
+    reviews: Mapped[list["SpeciesEntryReview"]] = relationship(
+        back_populates="species_entry",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index("species_entry_species_idx", "species_id"),
+        Index(
+            "species_entry_identity_uq",
+            "species_id",
+            "stereo_kind",
+            "stereo_label",
+            "electronic_state_kind",
+            "electronic_state_label",
+            "term_symbol",
+            "isotopologue_label",
+            unique=True,
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
+
+
+class ConformerGroup(Base, TimestampMixin, CreatedByMixin):
+    """Store one deduplicated conformational basin for a species entry."""
+
+    __tablename__ = "conformer_group"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+
+    species_entry_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("species_entry.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=False,
+    )
+
+    label: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    species_entry: Mapped["SpeciesEntry"] = relationship(
+        back_populates="conformer_groups"
+    )
+
+    observations: Mapped[list["ConformerObservation"]] = relationship(
+        back_populates="conformer_group",
+        cascade="save-update, merge",
+    )
+
+    selections: Mapped[list["ConformerSelection"]] = relationship(
+        back_populates="conformer_group",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index("conformer_group_species_entry_idx", "species_entry_id"),
+        Index(
+            "conformer_group_species_entry_label_uq",
+            "species_entry_id",
+            "label",
+            unique=True,
+        ),
+    )
+
+
+class ConformerObservation(Base, TimestampMixin, CreatedByMixin):
+    """Store one uploaded or imported conformer observation assigned to a group."""
+
+    __tablename__ = "conformer_observation"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+
+    conformer_group_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("conformer_group.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=False,
+    )
+
+    calculation_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("calculation.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=False,
+    )
+
+    assignment_scheme_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "conformer_assignment_scheme.id",
+            deferrable=True,
+            initially="IMMEDIATE",
+        ),
+        nullable=True,
+    )
+
+    scientific_origin: Mapped[ScientificOriginKind] = mapped_column(
+        SAEnum(ScientificOriginKind, name="scientific_origin_kind"),
+        nullable=False,
+        default=ScientificOriginKind.computed,
+        server_default=ScientificOriginKind.computed.value,
+    )
+
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    conformer_group: Mapped["ConformerGroup"] = relationship(
+        back_populates="observations"
+    )
+    calculation: Mapped["Calculation"] = relationship()
+    assignment_scheme: Mapped[Optional["ConformerAssignmentScheme"]] = relationship(
+        back_populates="observations"
+    )
+
+    __table_args__ = (
+        Index("conformer_calculation_uq", "calculation_id", unique=True),
+        Index("conformer_group_idx", "conformer_group_id"),
+    )
+
+
+class ConformerSelection(Base, TimestampMixin, CreatedByMixin):
+    """Store explicit workflow, curation, or UI selections for conformer groups.
+
+    `NULL` assignment-scheme references are treated as identical for dedupe.
+    """
+
+    __tablename__ = "conformer_selection"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+
+    conformer_group_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("conformer_group.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=False,
+    )
+
+    assignment_scheme_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "conformer_assignment_scheme.id",
+            deferrable=True,
+            initially="IMMEDIATE",
+        ),
+        nullable=True,
+    )
+
+    selection_kind: Mapped[ConformerSelectionKind] = mapped_column(
+        SAEnum(ConformerSelectionKind, name="conformer_selection_kind"),
+        nullable=False,
+    )
+
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    conformer_group: Mapped["ConformerGroup"] = relationship(
+        back_populates="selections"
+    )
+    assignment_scheme: Mapped[Optional["ConformerAssignmentScheme"]] = relationship(
+        back_populates="selections"
+    )
+
+    __table_args__ = (
+        Index(
+            "conformer_selection_kind_uq",
+            "conformer_group_id",
+            "assignment_scheme_id",
+            "selection_kind",
+            unique=True,
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
+
+
+class ConformerAssignmentScheme(Base, TimestampMixin, CreatedByMixin):
+    """Store versioned metadata about conformer-assignment or selection logic.
+
+    This table is optional in the simplified design. It is useful when the
+    application wants to preserve provenance for how conformers were assigned or
+    how selections such as lowest-energy/display-default were determined.
+    """
+
+    __tablename__ = "conformer_assignment_scheme"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    scope: Mapped[ConformerAssignmentScopeKind] = mapped_column(
+        SAEnum(ConformerAssignmentScopeKind, name="conformer_assignment_scope_kind"),
+        nullable=False,
+        default=ConformerAssignmentScopeKind.canonical,
+        server_default=ConformerAssignmentScopeKind.canonical.value,
+    )
+
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    parameters_json: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+    code_commit: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    is_default: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+
+    selections: Mapped[list["ConformerSelection"]] = relationship(
+        back_populates="assignment_scheme",
+        cascade="all, delete-orphan",
+    )
+    observations: Mapped[list["ConformerObservation"]] = relationship(
+        back_populates="assignment_scheme"
+    )
+
+    __table_args__ = (
+        Index(
+            "conformer_assignment_scheme_name_version_uq",
+            "name",
+            "version",
+            unique=True,
+        ),
+    )
+
+
+class SpeciesEntryReview(Base, TimestampMixin):
+    """Store explicit human review or curation events for species entries."""
+
+    __tablename__ = "species_entry_review"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+
+    species_entry_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("species_entry.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=False,
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("app_user.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=False,
+    )
+
+    role: Mapped[SpeciesEntryReviewRole] = mapped_column(
+        SAEnum(SpeciesEntryReviewRole, name="species_entry_review_role"),
+        nullable=False,
+    )
+
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    species_entry: Mapped["SpeciesEntry"] = relationship(back_populates="reviews")
+
+    __table_args__ = (
+        Index(
+            "species_entry_review_uq",
+            "species_entry_id",
+            "user_id",
+            "role",
+            unique=True,
+        ),
     )

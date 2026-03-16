@@ -6,12 +6,14 @@ from sqlalchemy import (
     CHAR,
     BigInteger,
     Boolean,
+    CheckConstraint,
     ForeignKey,
+    Integer,
     SmallInteger,
+    Text,
+    UniqueConstraint,
 )
-from sqlalchemy import (
-    Enum as SAEnum,
-)
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, CreatedByMixin, TimestampMixin
@@ -19,13 +21,11 @@ from app.db.models.common import ReactionRole
 
 if TYPE_CHECKING:
     from app.db.models.kinetics import Kinetics
-    from app.db.models.species import Species
-    from app.db.models.transition_state import TransitionState, TransitionStateEntry
+    from app.db.models.species import Species, SpeciesEntry
+    from app.db.models.transition_state import TransitionState
 
 
 class ChemReaction(Base, TimestampMixin):
-    """Stores a canonical reaction identity and its participants."""
-
     __tablename__ = "chem_reaction"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -38,23 +38,18 @@ class ChemReaction(Base, TimestampMixin):
         back_populates="reaction",
         cascade="all, delete-orphan",
     )
-
     entries: Mapped[list["ReactionEntry"]] = relationship(
         back_populates="reaction",
         cascade="all, delete-orphan",
     )
 
-    @property
-    def reactants(self) -> list["ReactionParticipant"]:
-        return [p for p in self.participants if p.role == ReactionRole.reactant]
-
-    @property
-    def products(self) -> list["ReactionParticipant"]:
-        return [p for p in self.participants if p.role == ReactionRole.product]
-
 
 class ReactionParticipant(Base):
-    """Represents one species on one side of a reaction."""
+    """Compressed stoichiometric summary for a reaction graph identity.
+
+    This is not an ordered participant-slot table. Repeated species on one side
+    of a reaction are represented with `stoichiometry`.
+    """
 
     __tablename__ = "reaction_participant"
 
@@ -73,17 +68,18 @@ class ReactionParticipant(Base):
         primary_key=True,
     )
     stoichiometry: Mapped[int] = mapped_column(SmallInteger, nullable=False)
-    reaction: Mapped["ChemReaction"] = relationship(
-        back_populates="participants",
-    )
-    species: Mapped["Species"] = relationship(
-        back_populates="reaction_participants",
+
+    reaction: Mapped["ChemReaction"] = relationship(back_populates="participants")
+    species: Mapped["Species"] = relationship(back_populates="reaction_participants")
+
+    __table_args__ = (
+        CheckConstraint(
+            "stoichiometry >= 1", name="reaction_participant_stoichiometry_ge_1"
+        ),
     )
 
 
 class ReactionEntry(Base, TimestampMixin, CreatedByMixin):
-    """Stores an entry-level reaction record and its preferred TS pointer."""
-
     __tablename__ = "reaction_entry"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -93,39 +89,57 @@ class ReactionEntry(Base, TimestampMixin, CreatedByMixin):
         nullable=False,
     )
 
-    preferred_ts_entry_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger,
-        ForeignKey("transition_state_entry.id", deferrable=True, initially="IMMEDIATE"),
-        nullable=True,
+    reaction: Mapped["ChemReaction"] = relationship(back_populates="entries")
+    structure_participants: Mapped[list["ReactionEntryStructureParticipant"]] = (
+        relationship(
+            back_populates="reaction_entry",
+            cascade="all, delete-orphan",
+            order_by="ReactionEntryStructureParticipant.participant_index",
+        )
     )
-
-    preferred_kinetics_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger,
-        ForeignKey("kinetics.id", deferrable=True, initially="DEFERRED"),
-        nullable=True,
-    )
-
-    reaction: Mapped["ChemReaction"] = relationship(
-        back_populates="entries",
-    )
-
     transition_states: Mapped[list["TransitionState"]] = relationship(
         back_populates="reaction_entry",
         cascade="all, delete-orphan",
     )
-
-    preferred_ts_entry: Mapped[Optional["TransitionStateEntry"]] = relationship(
-        foreign_keys=[preferred_ts_entry_id],
-        post_update=True,
-    )
-
     kinetics_records: Mapped[list["Kinetics"]] = relationship(
         back_populates="reaction_entry",
         cascade="all, delete-orphan",
         foreign_keys="Kinetics.reaction_entry_id",
     )
 
-    preferred_kinetics: Mapped[Optional["Kinetics"]] = relationship(
-        foreign_keys=[preferred_kinetics_id],
-        post_update=True,
+
+class ReactionEntryStructureParticipant(Base, TimestampMixin, CreatedByMixin):
+    __tablename__ = "reaction_entry_structure_participant"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+
+    reaction_entry_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("reaction_entry.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=False,
+    )
+    species_entry_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("species_entry.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=False,
+    )
+    role: Mapped[ReactionRole] = mapped_column(
+        SAEnum(ReactionRole, name="reaction_role"),
+        nullable=False,
+    )
+    participant_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    reaction_entry: Mapped["ReactionEntry"] = relationship(
+        back_populates="structure_participants"
+    )
+    species_entry: Mapped["SpeciesEntry"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint(
+            "reaction_entry_id",
+            "role",
+            "participant_index",
+            name="reaction_entry_structure_participant_order_uq",
+        ),
     )
