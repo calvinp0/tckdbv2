@@ -17,7 +17,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy.orm import Mapped, foreign, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, CreatedByMixin, TimestampMixin
 from app.db.models.common import (
@@ -342,9 +342,7 @@ class CalculationOptResult(Base):
     calculation: Mapped["Calculation"] = relationship(back_populates="opt_result")
 
     __table_args__ = (
-        CheckConstraint(
-            "n_steps IS NULL OR n_steps >= 0", name="n_steps_ge_0"
-        ),
+        CheckConstraint("n_steps IS NULL OR n_steps >= 0", name="n_steps_ge_0"),
     )
 
 
@@ -406,9 +404,7 @@ class CalculationScanResult(Base):
         order_by="CalculationScanPoint.point_index",
     )
 
-    __table_args__ = (
-        CheckConstraint("dimension >= 1", name="dimension_ge_1"),
-    )
+    __table_args__ = (CheckConstraint("dimension >= 1", name="dimension_ge_1"),)
 
 
 class CalculationScanCoordinate(Base):
@@ -432,10 +428,12 @@ class CalculationScanCoordinate(Base):
     symmetry_number: Mapped[Optional[int]] = mapped_column(SmallInteger, nullable=True)
 
     calculation: Mapped["Calculation"] = relationship(back_populates="scan_coordinates")
-    point_coordinate_values: Mapped[list["CalculationScanPointCoordinateValue"]] = relationship(
-        back_populates="coordinate",
-        cascade="all, delete-orphan",
-        overlaps="coordinate_values,scan_point",
+    point_coordinate_values: Mapped[list["CalculationScanPointCoordinateValue"]] = (
+        relationship(
+            back_populates="coordinate",
+            cascade="all, delete-orphan",
+            overlaps="coordinate_values,scan_point",
+        )
     )
 
     __table_args__ = (
@@ -528,9 +526,7 @@ class CalculationScanPoint(Base):
         )
     )
 
-    __table_args__ = (
-        CheckConstraint("point_index >= 1", name="point_index_ge_1"),
-    )
+    __table_args__ = (CheckConstraint("point_index >= 1", name="point_index_ge_1"),)
 
 
 class CalculationScanPointCoordinateValue(Base):

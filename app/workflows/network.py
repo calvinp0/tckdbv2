@@ -27,7 +27,9 @@ def persist_network_upload(
 
     species_entry_ids = [
         (
-            resolve_species_entry(session, species_link.species_entry, created_by=created_by).id,
+            resolve_species_entry(
+                session, species_link.species_entry, created_by=created_by
+            ).id,
             species_link.role,
         )
         for species_link in request.species_links

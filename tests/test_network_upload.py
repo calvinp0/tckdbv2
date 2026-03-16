@@ -4,9 +4,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models.app_user import AppUser
-from app.db.models.network import Network, NetworkReaction, NetworkSpecies
+from app.db.models.network import NetworkReaction, NetworkSpecies
 from app.db.models.reaction import ReactionEntry
-from app.db.models.species import SpeciesEntry
 from app.schemas.workflows.network_upload import NetworkUploadRequest
 from app.workflows.network import persist_network_upload
 
@@ -128,5 +127,23 @@ def test_persist_network_upload_creates_species_and_reaction_entries_without_use
 
         assert network.id is not None
         assert len(session.scalars(select(ReactionEntry)).all()) == reactions_before + 1
-        assert len(session.scalars(select(NetworkSpecies).where(NetworkSpecies.network_id == network.id)).all()) == 2
-        assert len(session.scalars(select(NetworkReaction).where(NetworkReaction.network_id == network.id)).all()) == 1
+        assert (
+            len(
+                session.scalars(
+                    select(NetworkSpecies).where(
+                        NetworkSpecies.network_id == network.id
+                    )
+                ).all()
+            )
+            == 2
+        )
+        assert (
+            len(
+                session.scalars(
+                    select(NetworkReaction).where(
+                        NetworkReaction.network_id == network.id
+                    )
+                ).all()
+            )
+            == 1
+        )

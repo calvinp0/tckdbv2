@@ -2,12 +2,12 @@ import pytest
 from pydantic import ValidationError
 
 from app.db.models.common import CalculationQuality, CalculationType
-from app.schemas.fragments.calculation import CalculationCreateRequest
 from app.schemas.entities.calculation import (
     CalculationCreateResolved,
     CalculationDependencyCreate,
     CalculationUpdate,
 )
+from app.schemas.fragments.calculation import CalculationCreateRequest
 
 
 def test_calculation_create_request_requires_exactly_one_owner() -> None:

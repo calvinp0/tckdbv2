@@ -159,7 +159,9 @@ class StatmechTorsionCreate(StatmechTorsionBase, SchemaBase):
         if len(self.coordinates) != self.dimension:
             raise ValueError("Number of torsion coordinates must equal dimension.")
 
-        coordinate_indices = [coordinate.coordinate_index for coordinate in self.coordinates]
+        coordinate_indices = [
+            coordinate.coordinate_index for coordinate in self.coordinates
+        ]
         expected_indices = list(range(1, self.dimension + 1))
         if sorted(coordinate_indices) != expected_indices:
             raise ValueError(
@@ -256,13 +258,10 @@ class StatmechCreate(StatmechBase, SchemaBase):
     def validate_nested_uniqueness(self) -> Self:
         torsion_indices = [torsion.torsion_index for torsion in self.torsions]
         if len(set(torsion_indices)) != len(torsion_indices):
-            raise ValueError(
-                "Torsion indices must be unique within a statmech record."
-            )
+            raise ValueError("Torsion indices must be unique within a statmech record.")
 
         source_pairs = [
-            (source.calculation_id, source.role)
-            for source in self.source_calculations
+            (source.calculation_id, source.role) for source in self.source_calculations
         ]
         if len(set(source_pairs)) != len(source_pairs):
             raise ValueError(

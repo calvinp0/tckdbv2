@@ -102,9 +102,7 @@ class TransitionStateEntry(Base, TimestampMixin, CreatedByMixin):
             "transition_state_id",
             name="uq_transition_state_entry_id",
         ),
-        CheckConstraint(
-            "multiplicity >= 1", name="multiplicity_ge_1"
-        ),
+        CheckConstraint("multiplicity >= 1", name="multiplicity_ge_1"),
     )
 
 

@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 import app.db.models  # noqa: F401
 from app.db.models.kinetics import Kinetics
 from app.schemas.workflows.kinetics_upload import KineticsUploadRequest
-from app.services.kinetics_resolution import persist_kinetics, resolve_kinetics_upload
 from app.schemas.workflows.reaction_upload import ReactionUploadRequest
+from app.services.kinetics_resolution import persist_kinetics, resolve_kinetics_upload
 from app.workflows.reaction import persist_reaction_upload
 
 

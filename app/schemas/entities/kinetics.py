@@ -115,8 +115,7 @@ class KineticsCreate(KineticsBase, SchemaBase):
     @model_validator(mode="after")
     def validate_unique_source_calculations(self) -> Self:
         keys = [
-            (source.calculation_id, source.role)
-            for source in self.source_calculations
+            (source.calculation_id, source.role) for source in self.source_calculations
         ]
         if len(set(keys)) != len(keys):
             raise ValueError(

@@ -72,11 +72,7 @@ class ReactionParticipant(Base):
     reaction: Mapped["ChemReaction"] = relationship(back_populates="participants")
     species: Mapped["Species"] = relationship(back_populates="reaction_participants")
 
-    __table_args__ = (
-        CheckConstraint(
-            "stoichiometry >= 1", name="stoichiometry_ge_1"
-        ),
-    )
+    __table_args__ = (CheckConstraint("stoichiometry >= 1", name="stoichiometry_ge_1"),)
 
 
 class ReactionEntry(Base, TimestampMixin, CreatedByMixin):

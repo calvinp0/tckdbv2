@@ -356,14 +356,18 @@ class CalculationScanResultCreate(CalculationScanResultPayload, SchemaBase):
 
     @model_validator(mode="after")
     def validate_scan_bundle(self) -> Self:
-        coordinate_indices = [coordinate.coordinate_index for coordinate in self.coordinates]
+        coordinate_indices = [
+            coordinate.coordinate_index for coordinate in self.coordinates
+        ]
         expected_coordinate_indices = list(range(1, self.dimension + 1))
         if sorted(coordinate_indices) != expected_coordinate_indices:
             raise ValueError(
                 "Scan coordinate_index values must run contiguously from 1..dimension."
             )
 
-        constraint_indices = [constraint.constraint_index for constraint in self.constraints]
+        constraint_indices = [
+            constraint.constraint_index for constraint in self.constraints
+        ]
         if len(set(constraint_indices)) != len(constraint_indices):
             raise ValueError(
                 "Scan constraint_index values must be unique within a scan result."

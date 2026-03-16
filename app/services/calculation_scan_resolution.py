@@ -32,9 +32,7 @@ def persist_calculation_scan(
     if calculation is None:
         raise ValueError(f"Unknown calculation_id={calculation_id}")
     if calculation.scan_result is not None:
-        raise ValueError(
-            f"Calculation {calculation_id} already has a scan result."
-        )
+        raise ValueError(f"Calculation {calculation_id} already has a scan result.")
 
     scan_result = CalculationScanResult(
         calculation_id=calculation_id,

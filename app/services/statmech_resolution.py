@@ -16,7 +16,9 @@ from app.services.calculation_resolution import resolve_workflow_tool_release_re
 from app.services.software_resolution import resolve_software_release_ref
 
 
-def _null_safe_equals(column: ColumnElement, value: int | str | None) -> ColumnElement[bool]:
+def _null_safe_equals(
+    column: ColumnElement, value: int | str | None
+) -> ColumnElement[bool]:
     """Build a nullable equality predicate for statmech dedupe lookups.
 
     :param column: SQLAlchemy column expression to compare.
@@ -158,7 +160,9 @@ def _attach_statmech_torsions(
 ) -> None:
     """Attach torsions and coordinates to a statmech record if they are missing."""
 
-    existing_torsions = {torsion.torsion_index: torsion for torsion in statmech.torsions}
+    existing_torsions = {
+        torsion.torsion_index: torsion for torsion in statmech.torsions
+    }
 
     for torsion_payload in payload.torsions:
         torsion = existing_torsions.get(torsion_payload.torsion_index)

@@ -9,14 +9,14 @@ from app.db.models.common import (
     StatmechTreatmentKind,
 )
 from app.schemas.common import SchemaBase
-from app.schemas.fragments.calculation import CalculationPayload
-from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
-from app.schemas.geometry import GeometryPayload
-from app.schemas.refs import SoftwareReleaseRef, WorkflowToolReleaseRef
 from app.schemas.entities.statmech import (
     StatmechSourceCalculationCreate,
     StatmechTorsionCreate,
 )
+from app.schemas.fragments.calculation import CalculationPayload
+from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
+from app.schemas.geometry import GeometryPayload
+from app.schemas.refs import SoftwareReleaseRef, WorkflowToolReleaseRef
 from app.schemas.utils import normalize_optional_text
 
 

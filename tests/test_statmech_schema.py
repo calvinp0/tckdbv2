@@ -63,7 +63,9 @@ def test_statmech_torsion_coordinate_requires_distinct_atom_indices() -> None:
         )
 
 
-def test_statmech_torsion_coordinate_update_checks_distinct_atoms_when_complete() -> None:
+def test_statmech_torsion_coordinate_update_checks_distinct_atoms_when_complete() -> (
+    None
+):
     with pytest.raises(ValueError, match="must be distinct"):
         StatmechTorsionCoordinateUpdate(
             atom1_index=1,

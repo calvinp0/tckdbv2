@@ -102,7 +102,9 @@ def test_persist_calculation_scan_persists_nested_scan_rows(db_engine) -> None:
             assert stored.dimension == 1
             assert len(stored.calculation.scan_coordinates) == 1
             assert len(stored.calculation.scan_constraints) == 1
-            assert stored.calculation.scan_constraints[0].constraint_kind.value == "bond"
+            assert (
+                stored.calculation.scan_constraints[0].constraint_kind.value == "bond"
+            )
             assert len(stored.calculation.scan_points) == 1
             assert len(stored.calculation.scan_points[0].coordinate_values) == 1
 

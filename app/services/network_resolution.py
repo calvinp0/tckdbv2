@@ -46,7 +46,9 @@ def resolve_network_upload(
         name=request.name,
         description=request.description,
         literature_id=literature.id if literature is not None else None,
-        software_release_id=software_release.id if software_release is not None else None,
+        software_release_id=(
+            software_release.id if software_release is not None else None
+        ),
         workflow_tool_release_id=(
             workflow_tool_release.id if workflow_tool_release is not None else None
         ),

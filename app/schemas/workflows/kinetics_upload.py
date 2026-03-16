@@ -4,8 +4,8 @@ from pydantic import Field, model_validator
 
 from app.db.models.common import KineticsModelKind, ScientificOriginKind
 from app.schemas.common import SchemaBase
-from app.schemas.refs import SoftwareReleaseRef, WorkflowToolReleaseRef
 from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
+from app.schemas.refs import SoftwareReleaseRef, WorkflowToolReleaseRef
 from app.schemas.utils import normalize_optional_text
 from app.schemas.workflows.literature_submission import LiteratureSubmissionRequest
 

@@ -57,6 +57,4 @@ class GeometryAtom(Base):
 
     geometry: Mapped[Geometry] = relationship(back_populates="atoms")
 
-    __table_args__ = (
-        CheckConstraint("atom_index >= 1", name="atom_index_ge_1"),
-    )
+    __table_args__ = (CheckConstraint("atom_index >= 1", name="atom_index_ge_1"),)

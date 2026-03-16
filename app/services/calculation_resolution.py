@@ -11,12 +11,12 @@ import app.db.models  # noqa: F401
 from app.db.models.calculation import Calculation
 from app.db.models.level_of_theory import LevelOfTheory
 from app.db.models.workflow import WorkflowTool, WorkflowToolRelease
+from app.schemas.entities.calculation import CalculationCreateResolved
 from app.schemas.fragments.calculation import CalculationCreateRequest
 from app.schemas.refs import (
     LevelOfTheoryRef,
     WorkflowToolReleaseRef,
 )
-from app.schemas.entities.calculation import CalculationCreateResolved
 from app.services.software_resolution import resolve_software_release_ref
 
 

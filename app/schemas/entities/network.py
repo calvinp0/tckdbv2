@@ -115,7 +115,6 @@ class NetworkCreate(NetworkBase, SchemaBase):
         return self
 
 
-
 class NetworkUpdate(SchemaBase):
     """Patch schema for a reaction network."""
 

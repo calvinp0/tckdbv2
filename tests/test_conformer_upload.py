@@ -5,13 +5,13 @@ from sqlalchemy.orm import Session
 
 from app.db.models.calculation import Calculation, CalculationOutputGeometry
 from app.db.models.geometry import Geometry
-from app.db.models.statmech import Statmech
 from app.db.models.species import (
     ConformerGroup,
     ConformerObservation,
     Species,
     SpeciesEntry,
 )
+from app.db.models.statmech import Statmech
 from app.schemas.workflows.conformer_upload import ConformerUploadRequest
 from app.workflows.conformer import persist_conformer_upload
 

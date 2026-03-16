@@ -10,8 +10,8 @@ from app.schemas.entities.calculation import (
 from app.schemas.entities.reaction import ReactionParticipantRead
 from app.schemas.entities.statmech import (
     StatmechSourceCalculationRead,
-    StatmechTorsionRead,
     StatmechTorsionCoordinateRead,
+    StatmechTorsionRead,
 )
 
 
