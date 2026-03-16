@@ -30,4 +30,5 @@ class TimestampedReadSchema(ORMBaseSchema):
 
 class TimestampedCreatedByReadSchema(TimestampedReadSchema):
     """Read schema with common timestamped identity fields."""
+
     created_by: int | None = None

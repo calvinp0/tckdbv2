@@ -4,7 +4,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import app.db.models  # noqa: F401
-
 from app.db.models.common import LiteratureKind
 from app.db.models.literature import Literature
 from app.schemas.resources.literature import LiteratureCreate
@@ -29,16 +28,22 @@ def _kind_from_identifiers(
         return LiteratureKind.book
     if normalized_doi is not None:
         return LiteratureKind.article
-    raise ValueError("Unable to infer literature kind without DOI, ISBN, or explicit kind")
+    raise ValueError(
+        "Unable to infer literature kind without DOI, ISBN, or explicit kind"
+    )
 
 
-def _metadata_to_fields(metadata: dict[str, object], *, source: str) -> dict[str, object]:
+def _metadata_to_fields(
+    metadata: dict[str, object], *, source: str
+) -> dict[str, object]:
     if source == "doi":
         return {
             "title": metadata.get("title"),
-            "journal": (metadata.get("container-title") or [None])[0]
-            if isinstance(metadata.get("container-title"), list)
-            else metadata.get("container-title"),
+            "journal": (
+                (metadata.get("container-title") or [None])[0]
+                if isinstance(metadata.get("container-title"), list)
+                else metadata.get("container-title")
+            ),
             "year": metadata.get("issued"),
             "volume": metadata.get("volume"),
             "issue": metadata.get("issue"),
@@ -74,7 +79,9 @@ def resolve_literature_submission(
 
     metadata_fields: dict[str, object] = {}
     if normalized_doi is not None:
-        metadata_fields = _metadata_to_fields(fetch_doi_metadata(normalized_doi) or {}, source="doi")
+        metadata_fields = _metadata_to_fields(
+            fetch_doi_metadata(normalized_doi) or {}, source="doi"
+        )
     elif normalized_isbn is not None:
         metadata_fields = _metadata_to_fields(
             fetch_isbn_metadata(normalized_isbn) or {},

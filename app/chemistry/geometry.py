@@ -34,11 +34,15 @@ def parse_xyz(payload: GeometryPayload) -> ParsedXYZ:
     try:
         natoms = int(lines[0].strip())
     except ValueError as exc:
-        raise ValueError("geometry.xyz_text first line must be an integer atom count") from exc
+        raise ValueError(
+            "geometry.xyz_text first line must be an integer atom count"
+        ) from exc
 
     atom_lines = lines[2:]
     if len(atom_lines) != natoms:
-        raise ValueError("geometry.xyz_text atom count does not match the number of atom lines")
+        raise ValueError(
+            "geometry.xyz_text atom count does not match the number of atom lines"
+        )
 
     atoms: list[tuple[str, float, float, float]] = []
     for line in atom_lines:

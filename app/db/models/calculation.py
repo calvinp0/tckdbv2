@@ -7,15 +7,17 @@ from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     PrimaryKeyConstraint,
+    SmallInteger,
     Text,
     UniqueConstraint,
     text,
 )
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, foreign, mapped_column, relationship
 
 from app.db.base import Base, CreatedByMixin, TimestampMixin
 from app.db.models.common import (
@@ -24,6 +26,7 @@ from app.db.models.common import (
     CalculationGeometryRole,
     CalculationQuality,
     CalculationType,
+    ScanConstraintKind,
 )
 
 if TYPE_CHECKING:
@@ -132,6 +135,26 @@ class Calculation(Base, TimestampMixin, CreatedByMixin):
         back_populates="calculation",
         cascade="all, delete-orphan",
         uselist=False,
+    )
+    scan_result: Mapped[Optional["CalculationScanResult"]] = relationship(
+        back_populates="calculation",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    scan_coordinates: Mapped[list["CalculationScanCoordinate"]] = relationship(
+        back_populates="calculation",
+        cascade="all, delete-orphan",
+        order_by="CalculationScanCoordinate.coordinate_index",
+    )
+    scan_constraints: Mapped[list["CalculationScanConstraint"]] = relationship(
+        back_populates="calculation",
+        cascade="all, delete-orphan",
+        order_by="CalculationScanConstraint.constraint_index",
+    )
+    scan_points: Mapped[list["CalculationScanPoint"]] = relationship(
+        back_populates="calculation",
+        cascade="all, delete-orphan",
+        order_by="CalculationScanPoint.point_index",
     )
     artifacts: Mapped[list["CalculationArtifact"]] = relationship(
         back_populates="calculation",
@@ -336,6 +359,222 @@ class CalculationFreqResult(Base):
     zpe_hartree: Mapped[Optional[float]] = mapped_column(nullable=True)
 
     calculation: Mapped["Calculation"] = relationship(back_populates="freq_result")
+
+
+class CalculationScanResult(Base):
+    """Scan-level metadata for a scan calculation."""
+
+    __tablename__ = "calc_scan_result"
+
+    calculation_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("calculation.id", deferrable=True, initially="IMMEDIATE"),
+        primary_key=True,
+    )
+    dimension: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_relaxed: Mapped[Optional[bool]] = mapped_column(nullable=True)
+    zero_energy_reference_hartree: Mapped[Optional[float]] = mapped_column(
+        nullable=True
+    )
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    calculation: Mapped["Calculation"] = relationship(back_populates="scan_result")
+    coordinates: Mapped[list["CalculationScanCoordinate"]] = relationship(
+        primaryjoin=(
+            "CalculationScanResult.calculation_id == "
+            "foreign(CalculationScanCoordinate.calculation_id)"
+        ),
+        viewonly=True,
+        order_by="CalculationScanCoordinate.coordinate_index",
+    )
+    constraints: Mapped[list["CalculationScanConstraint"]] = relationship(
+        primaryjoin=(
+            "CalculationScanResult.calculation_id == "
+            "foreign(CalculationScanConstraint.calculation_id)"
+        ),
+        viewonly=True,
+        order_by="CalculationScanConstraint.constraint_index",
+    )
+    points: Mapped[list["CalculationScanPoint"]] = relationship(
+        primaryjoin=(
+            "CalculationScanResult.calculation_id == "
+            "foreign(CalculationScanPoint.calculation_id)"
+        ),
+        viewonly=True,
+        order_by="CalculationScanPoint.point_index",
+    )
+
+    __table_args__ = (
+        CheckConstraint("dimension >= 1", name="calc_scan_result_dimension_ge_1"),
+    )
+
+
+class CalculationScanCoordinate(Base):
+    """Definition of one scanned internal coordinate."""
+
+    __tablename__ = "calc_scan_coordinate"
+
+    calculation_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("calculation.id", deferrable=True, initially="IMMEDIATE"),
+        primary_key=True,
+    )
+    coordinate_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    atom1_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    atom2_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    atom3_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    atom4_index: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    resolution_degrees: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    symmetry_number: Mapped[Optional[int]] = mapped_column(SmallInteger, nullable=True)
+
+    calculation: Mapped["Calculation"] = relationship(back_populates="scan_coordinates")
+    point_coordinate_values: Mapped[list["CalculationScanPointCoordinateValue"]] = relationship(
+        back_populates="coordinate",
+        cascade="all, delete-orphan",
+        overlaps="coordinate_values,scan_point",
+    )
+
+    __table_args__ = (
+        CheckConstraint("coordinate_index >= 1", name="calc_scan_coordinate_index_ge_1"),
+        CheckConstraint("atom1_index >= 1", name="calc_scan_coordinate_atom1_ge_1"),
+        CheckConstraint("atom2_index >= 1", name="calc_scan_coordinate_atom2_ge_1"),
+        CheckConstraint("atom3_index >= 1", name="calc_scan_coordinate_atom3_ge_1"),
+        CheckConstraint("atom4_index >= 1", name="calc_scan_coordinate_atom4_ge_1"),
+        CheckConstraint(
+            "resolution_degrees IS NULL OR resolution_degrees >= 1",
+            name="calc_scan_coordinate_resolution_degrees_ge_1",
+        ),
+        CheckConstraint(
+            "symmetry_number IS NULL OR symmetry_number >= 1",
+            name="calc_scan_coordinate_symmetry_number_ge_1",
+        ),
+    )
+
+
+class CalculationScanConstraint(Base):
+    """Constraint metadata attached to a scan calculation."""
+
+    __tablename__ = "calc_scan_constraint"
+
+    calculation_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("calculation.id", deferrable=True, initially="IMMEDIATE"),
+        primary_key=True,
+    )
+    constraint_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    constraint_kind: Mapped[ScanConstraintKind] = mapped_column(
+        SAEnum(ScanConstraintKind, name="scan_constraint_kind"),
+        nullable=False,
+    )
+    atom1_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    atom2_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    atom3_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    atom4_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    target_value: Mapped[Optional[float]] = mapped_column(nullable=True)
+
+    calculation: Mapped["Calculation"] = relationship(back_populates="scan_constraints")
+
+    __table_args__ = (
+        CheckConstraint(
+            "constraint_index >= 1",
+            name="calc_scan_constraint_index_ge_1",
+        ),
+        CheckConstraint("atom1_index >= 1", name="calc_scan_constraint_atom1_ge_1"),
+        CheckConstraint("atom2_index >= 1", name="calc_scan_constraint_atom2_ge_1"),
+        CheckConstraint(
+            "atom3_index IS NULL OR atom3_index >= 1",
+            name="calc_scan_constraint_atom3_ge_1",
+        ),
+        CheckConstraint(
+            "atom4_index IS NULL OR atom4_index >= 1",
+            name="calc_scan_constraint_atom4_ge_1",
+        ),
+    )
+
+
+class CalculationScanPoint(Base):
+    """One sampled point on a scan surface."""
+
+    __tablename__ = "calc_scan_point"
+
+    calculation_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("calculation.id", deferrable=True, initially="IMMEDIATE"),
+        primary_key=True,
+    )
+    point_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    electronic_energy_hartree: Mapped[Optional[float]] = mapped_column(nullable=True)
+    relative_energy_kj_mol: Mapped[Optional[float]] = mapped_column(nullable=True)
+    geometry_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("geometry.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=True,
+    )
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    calculation: Mapped["Calculation"] = relationship(back_populates="scan_points")
+    geometry: Mapped[Optional["Geometry"]] = relationship()
+    coordinate_values: Mapped[list["CalculationScanPointCoordinateValue"]] = (
+        relationship(
+            back_populates="scan_point",
+            cascade="all, delete-orphan",
+            overlaps="point_coordinate_values,coordinate",
+        )
+    )
+
+    __table_args__ = (
+        CheckConstraint("point_index >= 1", name="calc_scan_point_index_ge_1"),
+    )
+
+
+class CalculationScanPointCoordinateValue(Base):
+    """Coordinate values for one sampled scan point."""
+
+    __tablename__ = "calc_scan_point_coordinate_value"
+
+    calculation_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    point_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+    coordinate_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+    angle_degrees: Mapped[float] = mapped_column(nullable=False)
+
+    scan_point: Mapped["CalculationScanPoint"] = relationship(
+        back_populates="coordinate_values",
+        overlaps="point_coordinate_values,coordinate",
+    )
+    coordinate: Mapped["CalculationScanCoordinate"] = relationship(
+        back_populates="point_coordinate_values",
+        overlaps="coordinate_values,scan_point",
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["calculation_id", "point_index"],
+            ["calc_scan_point.calculation_id", "calc_scan_point.point_index"],
+            deferrable=True,
+            initially="IMMEDIATE",
+        ),
+        ForeignKeyConstraint(
+            ["calculation_id", "coordinate_index"],
+            [
+                "calc_scan_coordinate.calculation_id",
+                "calc_scan_coordinate.coordinate_index",
+            ],
+            deferrable=True,
+            initially="IMMEDIATE",
+        ),
+        CheckConstraint(
+            "point_index >= 1",
+            name="calc_scan_point_coordinate_value_point_index_ge_1",
+        ),
+        CheckConstraint(
+            "coordinate_index >= 1",
+            name="calc_scan_point_coordinate_value_coordinate_index_ge_1",
+        ),
+    )
 
 
 class CalculationArtifact(Base, TimestampMixin):

@@ -58,7 +58,7 @@ def test_resolve_calculation_create_request_creates_and_reuses_refs(db_engine) -
                 type="sp",
                 species_entry_id=species_entry_id,
                 software_release={
-                    "name": "Gaussian",
+                    "name": "gaussian",
                     "version": "16",
                     "revision": "C.01",
                 },
@@ -82,15 +82,21 @@ def test_resolve_calculation_create_request_creates_and_reuses_refs(db_engine) -
 
             assert session.scalar(select(Software).where(Software.name == "Gaussian"))
             assert session.scalar(
-                select(SoftwareRelease).where(SoftwareRelease.id == first.software_release_id)
+                select(SoftwareRelease).where(
+                    SoftwareRelease.id == first.software_release_id
+                )
             )
-            assert session.scalar(select(WorkflowTool).where(WorkflowTool.name == "ARC"))
+            assert session.scalar(
+                select(WorkflowTool).where(WorkflowTool.name == "ARC")
+            )
             assert session.scalar(
                 select(WorkflowToolRelease).where(
                     WorkflowToolRelease.id == first.workflow_tool_release_id
                 )
             )
-            assert session.scalar(select(LevelOfTheory).where(LevelOfTheory.id == first.lot_id))
+            assert session.scalar(
+                select(LevelOfTheory).where(LevelOfTheory.id == first.lot_id)
+            )
 
 
 def test_persist_calculation_persists_calculation(db_engine) -> None:

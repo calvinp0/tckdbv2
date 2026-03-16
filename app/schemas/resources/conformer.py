@@ -7,10 +7,13 @@ from app.db.models.common import (
     ConformerSelectionKind,
     ScientificOriginKind,
 )
-from app.schemas.common import SchemaBase, TimestampedReadSchema, TimestampedCreatedByReadSchema
-
+from app.schemas.common import (
+    SchemaBase,
+    TimestampedCreatedByReadSchema,
+)
 
 # Conformer Group
+
 
 class ConformerGroupBase(BaseModel):
     species_entry_id: int
@@ -34,6 +37,7 @@ class ConformerGroupRead(ConformerGroupBase, TimestampedCreatedByReadSchema):
 
 # Conformer Observation
 
+
 class ConformerObservationBase(BaseModel):
     conformer_group_id: int
     calculation_id: int
@@ -54,12 +58,14 @@ class ConformerObservationUpdate(SchemaBase):
     note: str | None = None
 
 
-class ConformerObservationRead(ConformerObservationBase, TimestampedCreatedByReadSchema):
+class ConformerObservationRead(
+    ConformerObservationBase, TimestampedCreatedByReadSchema
+):
     pass
 
 
-
 # Conformer Selection
+
 
 class ConformerSelectionBase(BaseModel):
     conformer_group_id: int

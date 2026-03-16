@@ -1,20 +1,23 @@
 from __future__ import annotations
 
-import hashlib
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import ColumnElement
 
 import app.db.models  # noqa: F401
-
 from app.chemistry.geometry import parse_xyz
-from app.chemistry.species import canonical_species_identity
 from app.db.models.calculation import CalculationOutputGeometry
 from app.db.models.common import CalculationGeometryRole
 from app.db.models.geometry import Geometry, GeometryAtom
-from app.db.models.species import ConformerGroup, ConformerObservation, Species, SpeciesEntry
-from app.schemas.fragments.calculation import CalculationCreateRequest, CalculationPayload
-from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
+from app.db.models.species import (
+    ConformerGroup,
+    ConformerObservation,
+    SpeciesEntry,
+)
+from app.resolution.species import resolve_species_entry
+from app.schemas.fragments.calculation import (
+    CalculationCreateRequest,
+    CalculationPayload,
+)
 from app.schemas.geometry import GeometryPayload
 from app.schemas.resources.geometry import GeometryAtomBase, GeometryCreate
 from app.schemas.workflows.conformer_upload import ConformerUploadRequest
@@ -22,101 +25,7 @@ from app.services.calculation_resolution import (
     persist_calculation,
     resolve_calculation_create_request,
 )
-
-
-def _null_safe_equals(column: ColumnElement, value: str | None) -> ColumnElement[bool]:
-    """Build a nullable equality predicate for identity lookups.
-
-    :param column: SQLAlchemy column expression to compare.
-    :param value: Candidate value, possibly ``None``.
-    :returns: ``column IS NULL`` when ``value`` is ``None``, otherwise ``column = value``.
-    """
-
-    return column.is_(None) if value is None else column == value
-
-
-def resolve_species(
-    session: Session,
-    payload: SpeciesEntryIdentityPayload,
-) -> Species:
-    """Resolve or create a species row from upload identity data.
-
-    :param session: Active SQLAlchemy session.
-    :param payload: Upload-facing species-entry identity payload.
-    :returns: Existing or newly created ``Species`` row.
-    :raises ValueError: If the payload cannot be canonicalized into a valid species identity.
-    """
-
-    canonical_smiles, inchi_key = canonical_species_identity(payload)
-
-    species = session.scalar(select(Species).where(Species.inchi_key == inchi_key))
-    if species is None:
-        species = Species(
-            kind=payload.molecule_kind,
-            smiles=canonical_smiles,
-            inchi_key=inchi_key,
-            charge=payload.charge,
-            multiplicity=payload.multiplicity,
-        )
-        session.add(species)
-        session.flush()
-
-    return species
-
-
-def resolve_species_entry(
-    session: Session,
-    payload: SpeciesEntryIdentityPayload,
-    *,
-    created_by: int | None = None,
-) -> SpeciesEntry:
-    """Resolve or create a species-entry row from upload identity data.
-
-    :param session: Active SQLAlchemy session.
-    :param payload: Upload-facing resolved identity payload.
-    :param created_by: Optional application user id for new rows.
-    :returns: Existing or newly created ``SpeciesEntry`` row.
-    :raises ValueError: If the underlying species identity cannot be canonicalized.
-    """
-
-    species = resolve_species(session, payload)
-
-    species_entry = session.scalar(
-        select(SpeciesEntry).where(
-            SpeciesEntry.species_id == species.id,
-            SpeciesEntry.kind == payload.species_entry_kind,
-            SpeciesEntry.stereo_kind == payload.stereo_kind,
-            _null_safe_equals(SpeciesEntry.stereo_label, payload.stereo_label),
-            SpeciesEntry.electronic_state_kind == payload.electronic_state_kind,
-            _null_safe_equals(
-                SpeciesEntry.electronic_state_label,
-                payload.electronic_state_label,
-            ),
-            _null_safe_equals(SpeciesEntry.term_symbol, payload.term_symbol),
-            _null_safe_equals(
-                SpeciesEntry.isotopologue_label,
-                payload.isotopologue_label,
-            ),
-        )
-    )
-    if species_entry is None:
-        species_entry = SpeciesEntry(
-            species_id=species.id,
-            kind=payload.species_entry_kind,
-            unmapped_smiles=payload.unmapped_smiles,
-            stereo_kind=payload.stereo_kind,
-            stereo_label=payload.stereo_label,
-            electronic_state_kind=payload.electronic_state_kind,
-            electronic_state_label=payload.electronic_state_label,
-            term_symbol_raw=payload.term_symbol_raw,
-            term_symbol=payload.term_symbol,
-            isotopologue_label=payload.isotopologue_label,
-            created_by=created_by,
-        )
-        session.add(species_entry)
-        session.flush()
-
-    return species_entry
+from app.services.statmech_resolution import resolve_or_create_statmech
 
 
 def _geometry_create_from_payload(payload: GeometryPayload) -> GeometryCreate:
@@ -128,6 +37,8 @@ def _geometry_create_from_payload(payload: GeometryPayload) -> GeometryCreate:
     """
 
     parsed = parse_xyz(payload)
+    import hashlib
+
     geom_hash = hashlib.sha256(parsed.canonical_xyz_text.encode("utf-8")).hexdigest()
     atoms = [
         GeometryAtomBase(atom_index=index, element=element, x=x, y=y, z=z)
@@ -268,7 +179,9 @@ def persist_conformer_upload(
         request.calculation,
         species_entry_id=species_entry.id,
     )
-    calculation_resolved = resolve_calculation_create_request(session, calculation_request)
+    calculation_resolved = resolve_calculation_create_request(
+        session, calculation_request
+    )
     calculation = persist_calculation(
         session,
         calculation_resolved,
@@ -298,5 +211,15 @@ def persist_conformer_upload(
         created_by=created_by,
     )
     session.add(observation)
+
+    if request.statmech is not None:
+        resolve_or_create_statmech(
+            session,
+            request.statmech,
+            species_entry_id=species_entry.id,
+            uploaded_calculation_id=calculation.id,
+            created_by=created_by,
+        )
+
     session.flush()
     return observation

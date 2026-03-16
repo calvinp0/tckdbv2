@@ -8,14 +8,16 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
 import app.db.models  # noqa: F401
-
 from app.db.models.calculation import Calculation
 from app.db.models.level_of_theory import LevelOfTheory
-from app.db.models.software import Software, SoftwareRelease
 from app.db.models.workflow import WorkflowTool, WorkflowToolRelease
 from app.schemas.fragments.calculation import CalculationCreateRequest
+from app.schemas.refs import (
+    LevelOfTheoryRef,
+    WorkflowToolReleaseRef,
+)
 from app.schemas.resources.calculation import CalculationCreateResolved
-from app.schemas.refs import LevelOfTheoryRef, SoftwareReleaseRef, WorkflowToolReleaseRef
+from app.services.software_resolution import resolve_software_release_ref
 
 
 def _null_safe_equals(column: ColumnElement, value: str | None) -> ColumnElement[bool]:
@@ -48,46 +50,6 @@ def _level_of_theory_hash(ref: LevelOfTheoryRef) -> str:
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
-
-
-def resolve_software_release_ref(
-    session: Session,
-    ref: SoftwareReleaseRef,
-) -> SoftwareRelease:
-    """Resolve or create a software release row.
-
-    :param session: Active SQLAlchemy session.
-    :param ref: Upload-facing software release reference.
-    :returns: Existing or newly created ``SoftwareRelease`` row.
-    """
-
-    software = session.scalar(select(Software).where(Software.name == ref.name))
-    if software is None:
-        software = Software(name=ref.name)
-        session.add(software)
-        session.flush()
-
-    release = session.scalar(
-        select(SoftwareRelease).where(
-            SoftwareRelease.software_id == software.id,
-            _null_safe_equals(SoftwareRelease.version, ref.version),
-            _null_safe_equals(SoftwareRelease.revision, ref.revision),
-            _null_safe_equals(SoftwareRelease.build, ref.build),
-        )
-    )
-    if release is None:
-        release = SoftwareRelease(
-            software_id=software.id,
-            version=ref.version,
-            revision=ref.revision,
-            build=ref.build,
-            release_date=ref.release_date,
-            notes=ref.notes,
-        )
-        session.add(release)
-        session.flush()
-
-    return release
 
 
 def resolve_workflow_tool_release_ref(

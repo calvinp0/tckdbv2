@@ -34,7 +34,9 @@ def test_species_entry_update_normalizes_identity_text_fields() -> None:
     assert schema.term_symbol == "A2Sigma+"
 
 
-def test_species_entry_schema_does_not_yet_force_unspecified_stereo_label_to_none() -> None:
+def test_species_entry_schema_does_not_yet_force_unspecified_stereo_label_to_none() -> (
+    None
+):
     schema = SpeciesEntryCreate(
         species_id=1,
         stereo_kind=SpeciesEntryStereoKind.unspecified,

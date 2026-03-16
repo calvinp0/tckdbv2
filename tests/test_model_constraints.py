@@ -452,6 +452,28 @@ def test_basic_positive_count_checks_reject_nonsense_rows(db_conn) -> None:
         {"reaction_id": reaction_id, "species_id": species_id},
     )
 
+    species_entry_id = _create_species_entry(db_conn, species_id)
+    reaction_entry_id = db_conn.execute(
+        text("""
+            INSERT INTO reaction_entry (reaction_id)
+            VALUES (:reaction_id)
+            RETURNING id
+            """),
+        {"reaction_id": reaction_id},
+    ).scalar_one()
+    _assert_integrity_error(
+        db_conn,
+        """
+        INSERT INTO reaction_entry_structure_participant
+            (reaction_entry_id, species_entry_id, role, participant_index)
+        VALUES (:reaction_entry_id, :species_entry_id, 'reactant', 0)
+        """,
+        {
+            "reaction_entry_id": reaction_entry_id,
+            "species_entry_id": species_entry_id,
+        },
+    )
+
     calculation_id = _create_species_calculation(db_conn)
     geometry_id = _create_geometry(
         db_conn,
@@ -487,4 +509,71 @@ def test_thermo_nasa_requires_consistent_temperature_bounds(db_conn) -> None:
         VALUES (:thermo_id, 500.0, 1000.0)
         """,
         {"thermo_id": thermo_id},
+    )
+
+
+def test_scan_result_tables_enforce_basic_constraints(db_conn) -> None:
+    species_id = _create_species(db_conn, inchi_key=_next_inchi_key("SCANRESULT"))
+    species_entry_id = _create_species_entry(db_conn, species_id)
+    calculation_id = db_conn.execute(
+        text("""
+            INSERT INTO calculation (type, species_entry_id)
+            VALUES ('scan', :species_entry_id)
+            RETURNING id
+            """),
+        {"species_entry_id": species_entry_id},
+    ).scalar_one()
+
+    _assert_integrity_error(
+        db_conn,
+        """
+        INSERT INTO calc_scan_result (calculation_id, dimension)
+        VALUES (:calculation_id, 0)
+        """,
+        {"calculation_id": calculation_id},
+    )
+
+    db_conn.execute(
+        text("""
+            INSERT INTO calc_scan_result (calculation_id, dimension)
+            VALUES (:calculation_id, 1)
+            """),
+        {"calculation_id": calculation_id},
+    )
+    db_conn.execute(
+        text("""
+            INSERT INTO calc_scan_coordinate (
+                calculation_id, coordinate_index, atom1_index, atom2_index, atom3_index, atom4_index
+            )
+            VALUES (:calculation_id, 1, 1, 2, 3, 4)
+            """),
+        {"calculation_id": calculation_id},
+    )
+
+    _assert_integrity_error(
+        db_conn,
+        """
+        INSERT INTO calc_scan_point (calculation_id, point_index)
+        VALUES (:calculation_id, 0)
+        """,
+        {"calculation_id": calculation_id},
+    )
+
+    db_conn.execute(
+        text("""
+            INSERT INTO calc_scan_point (calculation_id, point_index)
+            VALUES (:calculation_id, 1)
+            """),
+        {"calculation_id": calculation_id},
+    )
+
+    _assert_integrity_error(
+        db_conn,
+        """
+        INSERT INTO calc_scan_point_coordinate_value (
+            calculation_id, point_index, coordinate_index, angle_degrees
+        )
+        VALUES (:calculation_id, 2, 1, 45.0)
+        """,
+        {"calculation_id": calculation_id},
     )

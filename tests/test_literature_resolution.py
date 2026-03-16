@@ -71,7 +71,9 @@ def test_resolve_literature_submission_manual_fallback() -> None:
     assert resolved.isbn is None
 
 
-def test_resolve_or_create_literature_reuses_existing_row(db_engine, monkeypatch) -> None:
+def test_resolve_or_create_literature_reuses_existing_row(
+    db_engine, monkeypatch
+) -> None:
     monkeypatch.setattr(
         "app.services.literature_resolution.fetch_doi_metadata",
         lambda doi: {"title": "Should Not Be Used"},
@@ -93,4 +95,6 @@ def test_resolve_or_create_literature_reuses_existing_row(db_engine, monkeypatch
             )
 
             assert resolved.id == existing.id
-            assert session.scalar(select(Literature).where(Literature.id == existing.id))
+            assert session.scalar(
+                select(Literature).where(Literature.id == existing.id)
+            )

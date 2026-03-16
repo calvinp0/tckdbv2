@@ -1,5 +1,3 @@
-from typing import Self
-
 from pydantic import Field, field_validator
 
 from app.db.models.common import (

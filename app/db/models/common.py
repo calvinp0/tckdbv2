@@ -117,6 +117,13 @@ class CalculationDependencyRole(str, Enum):
     neb_parent = "neb_parent"
 
 
+class ScanConstraintKind(str, Enum):
+    bond = "bond"
+    angle = "angle"
+    dihedral = "dihedral"
+    improper = "improper"
+
+
 class ArtifactKind(str, Enum):
     input = "input"
     output_log = "output_log"

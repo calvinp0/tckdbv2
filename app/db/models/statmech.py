@@ -116,6 +116,7 @@ class Statmech(Base, TimestampMixin, CreatedByMixin):
             "statmech_dedupe_uq",
             "species_entry_id",
             "scientific_origin",
+            "literature_id",
             "workflow_tool_release_id",
             "software_release_id",
             "statmech_treatment",
@@ -183,7 +184,7 @@ class StatmechTorsion(Base):
     source_scan_calculation: Mapped[Optional["Calculation"]] = relationship(
         foreign_keys=[source_scan_calculation_id]
     )
-    definitions: Mapped[list["StatmechTorsionDefinition"]] = relationship(
+    coordinates: Mapped[list["StatmechTorsionDefinition"]] = relationship(
         back_populates="torsion",
         cascade="all, delete-orphan",
         order_by="StatmechTorsionDefinition.coordinate_index",
@@ -191,6 +192,17 @@ class StatmechTorsion(Base):
 
     __table_args__ = (
         CheckConstraint("dimension >= 1", name="statmech_torsion_dimension_ge_1"),
+        CheckConstraint("torsion_index >= 1", name="statmech_torsion_index_ge_1"),
+        CheckConstraint(
+            "symmetry_number IS NULL OR symmetry_number >= 1",
+            name="statmech_torsion_symmetry_number_ge_1",
+        ),
+        Index(
+            "statmech_torsion_statmech_torsion_index_uq",
+            "statmech_id",
+            "torsion_index",
+            unique=True,
+        ),
     )
 
 
@@ -211,7 +223,7 @@ class StatmechTorsionDefinition(Base):
     atom3_index: Mapped[int] = mapped_column(Integer, nullable=False)
     atom4_index: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    torsion: Mapped["StatmechTorsion"] = relationship(back_populates="definitions")
+    torsion: Mapped["StatmechTorsion"] = relationship(back_populates="coordinates")
 
     __table_args__ = (
         CheckConstraint(

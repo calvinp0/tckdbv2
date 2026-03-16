@@ -10,7 +10,6 @@ from app.db.models.common import (
 from app.schemas.common import SchemaBase, TimestampedCreatedByReadSchema
 from app.schemas.utils import normalize_optional_text
 
-
 _IDENTITY_TEXT_FIELDS = (
     "unmapped_smiles",
     "stereo_label",
@@ -19,6 +18,8 @@ _IDENTITY_TEXT_FIELDS = (
     "term_symbol",
     "isotopologue_label",
 )
+
+
 class SpeciesEntryIdentityValidatorMixin:
     @model_validator(mode="after")
     def normalize_identity_text_fields(self) -> Self:

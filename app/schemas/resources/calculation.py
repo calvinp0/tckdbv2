@@ -8,8 +8,14 @@ from app.db.models.common import (
     CalculationGeometryRole,
     CalculationQuality,
     CalculationType,
+    ScanConstraintKind,
 )
-from app.schemas.common import SchemaBase, TimestampedCreatedByReadSchema, TimestampedReadSchema
+from app.schemas.common import (
+    ORMBaseSchema,
+    SchemaBase,
+    TimestampedCreatedByReadSchema,
+    TimestampedReadSchema,
+)
 from app.schemas.fragments.calculation import CalculationOwnerRequiredMixin
 
 
@@ -69,7 +75,7 @@ class CalculationInputGeometryUpdate(SchemaBase):
     input_order: int | None = Field(default=None, ge=1)
 
 
-class CalculationInputGeometryRead(CalculationInputGeometryBase, BaseModel):
+class CalculationInputGeometryRead(CalculationInputGeometryBase, ORMBaseSchema):
     pass
 
 
@@ -90,7 +96,7 @@ class CalculationOutputGeometryUpdate(SchemaBase):
     role: CalculationGeometryRole | None = None
 
 
-class CalculationOutputGeometryRead(CalculationOutputGeometryBase, BaseModel):
+class CalculationOutputGeometryRead(CalculationOutputGeometryBase, ORMBaseSchema):
     pass
 
 
@@ -116,7 +122,7 @@ class CalculationDependencyUpdate(SchemaBase):
     dependency_role: CalculationDependencyRole | None = None
 
 
-class CalculationDependencyRead(CalculationDependencyBase, BaseModel):
+class CalculationDependencyRead(CalculationDependencyBase, ORMBaseSchema):
     pass
 
 
@@ -156,7 +162,7 @@ class CalculationSPResultUpdate(SchemaBase):
     electronic_energy_hartree: float | None = None
 
 
-class CalculationSPResultRead(CalculationSPResultBase, BaseModel):
+class CalculationSPResultRead(CalculationSPResultBase, ORMBaseSchema):
     pass
 
 
@@ -177,7 +183,7 @@ class CalculationOptResultUpdate(SchemaBase):
     final_energy_hartree: float | None = None
 
 
-class CalculationOptResultRead(CalculationOptResultBase, BaseModel):
+class CalculationOptResultRead(CalculationOptResultBase, ORMBaseSchema):
     pass
 
 
@@ -198,5 +204,197 @@ class CalculationFreqResultUpdate(SchemaBase):
     zpe_hartree: float | None = None
 
 
-class CalculationFreqResultRead(CalculationFreqResultBase, BaseModel):
+class CalculationFreqResultRead(CalculationFreqResultBase, ORMBaseSchema):
     pass
+
+
+class CalculationScanCoordinatePayload(BaseModel):
+    coordinate_index: int = Field(ge=1)
+    atom1_index: int = Field(ge=1)
+    atom2_index: int = Field(ge=1)
+    atom3_index: int = Field(ge=1)
+    atom4_index: int = Field(ge=1)
+    resolution_degrees: float | None = None
+    symmetry_number: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def validate_distinct_atoms(self) -> Self:
+        atom_indices = {
+            self.atom1_index,
+            self.atom2_index,
+            self.atom3_index,
+            self.atom4_index,
+        }
+        if len(atom_indices) != 4:
+            raise ValueError("Scan coordinate atom indices must be distinct.")
+        return self
+
+
+class CalculationScanCoordinateCreate(CalculationScanCoordinatePayload, SchemaBase):
+    pass
+
+
+class CalculationScanCoordinateUpdate(SchemaBase):
+    coordinate_index: int | None = Field(default=None, ge=1)
+    atom1_index: int | None = Field(default=None, ge=1)
+    atom2_index: int | None = Field(default=None, ge=1)
+    atom3_index: int | None = Field(default=None, ge=1)
+    atom4_index: int | None = Field(default=None, ge=1)
+    resolution_degrees: float | None = None
+    symmetry_number: int | None = Field(default=None, ge=1)
+
+
+class CalculationScanCoordinateRead(CalculationScanCoordinatePayload, ORMBaseSchema):
+    calculation_id: int
+
+
+class CalculationScanConstraintPayload(BaseModel):
+    constraint_index: int = Field(ge=1)
+    constraint_kind: ScanConstraintKind
+    atom1_index: int = Field(ge=1)
+    atom2_index: int = Field(ge=1)
+    atom3_index: int | None = Field(default=None, ge=1)
+    atom4_index: int | None = Field(default=None, ge=1)
+    target_value: float | None = None
+
+
+class CalculationScanConstraintCreate(CalculationScanConstraintPayload, SchemaBase):
+    pass
+
+
+class CalculationScanConstraintUpdate(SchemaBase):
+    constraint_index: int | None = Field(default=None, ge=1)
+    constraint_kind: ScanConstraintKind | None = None
+    atom1_index: int | None = Field(default=None, ge=1)
+    atom2_index: int | None = Field(default=None, ge=1)
+    atom3_index: int | None = Field(default=None, ge=1)
+    atom4_index: int | None = Field(default=None, ge=1)
+    target_value: float | None = None
+
+
+class CalculationScanConstraintRead(CalculationScanConstraintPayload, ORMBaseSchema):
+    calculation_id: int
+
+
+class CalculationScanPointCoordinateValuePayload(BaseModel):
+    coordinate_index: int = Field(ge=1)
+    angle_degrees: float
+
+
+class CalculationScanPointCoordinateValueCreate(
+    CalculationScanPointCoordinateValuePayload,
+    SchemaBase,
+):
+    pass
+
+
+class CalculationScanPointCoordinateValueUpdate(SchemaBase):
+    coordinate_index: int | None = Field(default=None, ge=1)
+    angle_degrees: float | None = None
+
+
+class CalculationScanPointCoordinateValueRead(
+    CalculationScanPointCoordinateValuePayload,
+    ORMBaseSchema,
+):
+    calculation_id: int
+    point_index: int
+
+
+class CalculationScanPointPayload(BaseModel):
+    point_index: int = Field(ge=1)
+    electronic_energy_hartree: float | None = None
+    relative_energy_kj_mol: float | None = None
+    geometry_id: int | None = None
+    note: str | None = None
+
+
+class CalculationScanPointCreate(CalculationScanPointPayload, SchemaBase):
+    coordinate_values: list[CalculationScanPointCoordinateValueCreate] = Field(
+        default_factory=list
+    )
+
+    @model_validator(mode="after")
+    def validate_unique_coordinate_values(self) -> Self:
+        coordinate_indices = [
+            coordinate_value.coordinate_index
+            for coordinate_value in self.coordinate_values
+        ]
+        if len(set(coordinate_indices)) != len(coordinate_indices):
+            raise ValueError(
+                "Scan point coordinate_index values must be unique within a point."
+            )
+        return self
+
+
+class CalculationScanPointUpdate(SchemaBase):
+    point_index: int | None = Field(default=None, ge=1)
+    electronic_energy_hartree: float | None = None
+    relative_energy_kj_mol: float | None = None
+    geometry_id: int | None = None
+    note: str | None = None
+
+
+class CalculationScanPointRead(CalculationScanPointPayload, ORMBaseSchema):
+    calculation_id: int
+    coordinate_values: list[CalculationScanPointCoordinateValueRead] = Field(
+        default_factory=list
+    )
+
+
+class CalculationScanResultPayload(BaseModel):
+    dimension: int = Field(ge=1)
+    is_relaxed: bool | None = None
+    zero_energy_reference_hartree: float | None = None
+    note: str | None = None
+
+
+class CalculationScanResultCreate(CalculationScanResultPayload, SchemaBase):
+    coordinates: list[CalculationScanCoordinateCreate] = Field(default_factory=list)
+    constraints: list[CalculationScanConstraintCreate] = Field(default_factory=list)
+    points: list[CalculationScanPointCreate] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_scan_bundle(self) -> Self:
+        coordinate_indices = [coordinate.coordinate_index for coordinate in self.coordinates]
+        expected_coordinate_indices = list(range(1, self.dimension + 1))
+        if sorted(coordinate_indices) != expected_coordinate_indices:
+            raise ValueError(
+                "Scan coordinate_index values must run contiguously from 1..dimension."
+            )
+
+        constraint_indices = [constraint.constraint_index for constraint in self.constraints]
+        if len(set(constraint_indices)) != len(constraint_indices):
+            raise ValueError(
+                "Scan constraint_index values must be unique within a scan result."
+            )
+
+        point_indices = [point.point_index for point in self.points]
+        if len(set(point_indices)) != len(point_indices):
+            raise ValueError(
+                "Scan point_index values must be unique within a scan result."
+            )
+
+        valid_coordinate_indices = set(coordinate_indices)
+        for point in self.points:
+            for coordinate_value in point.coordinate_values:
+                if coordinate_value.coordinate_index not in valid_coordinate_indices:
+                    raise ValueError(
+                        "Scan point coordinate values must reference defined scan coordinates."
+                    )
+
+        return self
+
+
+class CalculationScanResultUpdate(SchemaBase):
+    dimension: int | None = Field(default=None, ge=1)
+    is_relaxed: bool | None = None
+    zero_energy_reference_hartree: float | None = None
+    note: str | None = None
+
+
+class CalculationScanResultRead(CalculationScanResultPayload, ORMBaseSchema):
+    calculation_id: int
+    coordinates: list[CalculationScanCoordinateRead] = Field(default_factory=list)
+    constraints: list[CalculationScanConstraintRead] = Field(default_factory=list)
+    points: list[CalculationScanPointRead] = Field(default_factory=list)

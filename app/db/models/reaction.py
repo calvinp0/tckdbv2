@@ -136,6 +136,10 @@ class ReactionEntryStructureParticipant(Base, TimestampMixin, CreatedByMixin):
     species_entry: Mapped["SpeciesEntry"] = relationship()
 
     __table_args__ = (
+        CheckConstraint(
+            "participant_index >= 1",
+            name="reaction_entry_participant_index_ge_1",
+        ),
         UniqueConstraint(
             "reaction_entry_id",
             "role",
