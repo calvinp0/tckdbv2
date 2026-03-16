@@ -32,7 +32,7 @@ class WorkflowTool(Base, TimestampMixin):
         cascade="all, delete-orphan",
     )
 
-    __table_args__ = (UniqueConstraint("name", name="workflow_tool_name_uq"),)
+    __table_args__ = (UniqueConstraint("name"),)
 
 
 class WorkflowToolRelease(Base, TimestampMixin):
@@ -80,7 +80,7 @@ class WorkflowToolRelease(Base, TimestampMixin):
 
     __table_args__ = (
         Index(
-            "workflow_tool_release_dedupe_uq",
+            "uq_workflow_tool_release_workflow_tool_id",
             "workflow_tool_id",
             "version",
             "git_commit",

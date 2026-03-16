@@ -3,7 +3,7 @@ from pydantic import ValidationError
 
 from app.db.models.common import CalculationQuality, CalculationType
 from app.schemas.fragments.calculation import CalculationCreateRequest
-from app.schemas.resources.calculation import (
+from app.schemas.entities.calculation import (
     CalculationCreateResolved,
     CalculationDependencyCreate,
     CalculationUpdate,

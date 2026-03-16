@@ -32,6 +32,6 @@ class LiteratureAuthor(Base):
         UniqueConstraint(
             "literature_id",
             "author_order",
-            name="literature_author_order_uq",
+            name="uq_literature_author_literature_id",
         ),
     )

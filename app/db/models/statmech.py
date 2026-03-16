@@ -110,10 +110,10 @@ class Statmech(Base, TimestampMixin, CreatedByMixin):
     __table_args__ = (
         CheckConstraint(
             "external_symmetry IS NULL OR external_symmetry >= 1",
-            name="statmech_external_symmetry_ge_1",
+            name="external_symmetry_ge_1",
         ),
         Index(
-            "statmech_dedupe_uq",
+            "uq_statmech_species_entry_id",
             "species_entry_id",
             "scientific_origin",
             "literature_id",
@@ -191,14 +191,14 @@ class StatmechTorsion(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("dimension >= 1", name="statmech_torsion_dimension_ge_1"),
-        CheckConstraint("torsion_index >= 1", name="statmech_torsion_index_ge_1"),
+        CheckConstraint("dimension >= 1", name="dimension_ge_1"),
+        CheckConstraint("torsion_index >= 1", name="torsion_index_ge_1"),
         CheckConstraint(
             "symmetry_number IS NULL OR symmetry_number >= 1",
-            name="statmech_torsion_symmetry_number_ge_1",
+            name="symmetry_number_ge_1",
         ),
         Index(
-            "statmech_torsion_statmech_torsion_index_uq",
+            "uq_statmech_torsion_statmech_id",
             "statmech_id",
             "torsion_index",
             unique=True,
@@ -228,10 +228,10 @@ class StatmechTorsionDefinition(Base):
     __table_args__ = (
         CheckConstraint(
             "coordinate_index >= 1",
-            name="statmech_torsion_coord_index_ge_1",
+            name="coordinate_index_ge_1",
         ),
-        CheckConstraint("atom1_index >= 1", name="statmech_torsion_atom1_ge_1"),
-        CheckConstraint("atom2_index >= 1", name="statmech_torsion_atom2_ge_1"),
-        CheckConstraint("atom3_index >= 1", name="statmech_torsion_atom3_ge_1"),
-        CheckConstraint("atom4_index >= 1", name="statmech_torsion_atom4_ge_1"),
+        CheckConstraint("atom1_index >= 1", name="atom1_index_ge_1"),
+        CheckConstraint("atom2_index >= 1", name="atom2_index_ge_1"),
+        CheckConstraint("atom3_index >= 1", name="atom3_index_ge_1"),
+        CheckConstraint("atom4_index >= 1", name="atom4_index_ge_1"),
     )

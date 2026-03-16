@@ -33,7 +33,7 @@ class Software(Base, TimestampMixin):
         cascade="all, delete-orphan",
     )
 
-    __table_args__ = (UniqueConstraint("name", name="software_name_uq"),)
+    __table_args__ = (UniqueConstraint("name"),)
 
 
 class SoftwareRelease(Base, TimestampMixin):
@@ -81,7 +81,7 @@ class SoftwareRelease(Base, TimestampMixin):
 
     __table_args__ = (
         Index(
-            "software_release_dedupe_uq",
+            "uq_software_release_software_id",
             "software_id",
             "version",
             "revision",

@@ -13,7 +13,7 @@ from app.db.models.species import (
     SpeciesEntry,
 )
 from app.schemas.workflows.conformer_upload import ConformerUploadRequest
-from app.services.conformer_workflow import persist_conformer_upload
+from app.workflows.conformer import persist_conformer_upload
 
 
 def _hydrogen_request(*, label: str | None = None) -> ConformerUploadRequest:

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 import app.db.models  # noqa: F401
 from app.db.models.common import LiteratureKind
 from app.db.models.literature import Literature
-from app.schemas.resources.literature import LiteratureCreate
+from app.schemas.entities.literature import LiteratureCreate
 from app.schemas.workflows.literature_submission import LiteratureSubmissionRequest
 from app.services.literature_metadata import (
     fetch_doi_metadata,

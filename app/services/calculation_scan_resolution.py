@@ -11,7 +11,7 @@ from app.db.models.calculation import (
     CalculationScanPointCoordinateValue,
     CalculationScanResult,
 )
-from app.schemas.resources.calculation import CalculationScanResultCreate
+from app.schemas.entities.calculation import CalculationScanResultCreate
 
 
 def persist_calculation_scan(

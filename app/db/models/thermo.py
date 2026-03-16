@@ -96,7 +96,7 @@ class Thermo(Base, TimestampMixin, CreatedByMixin):
 
     __table_args__ = (
         Index(
-            "thermo_dedupe_uq",
+            "uq_thermo_species_entry_id",
             "species_entry_id",
             "scientific_origin",
             "workflow_tool_release_id",
@@ -162,7 +162,7 @@ class ThermoNASA(Base):
     thermo: Mapped["Thermo"] = relationship(back_populates="nasa")
 
     __table_args__ = (
-        CheckConstraint("t_low IS NULL OR t_low > 0", name="thermo_nasa_t_low_gt_0"),
+        CheckConstraint("t_low IS NULL OR t_low > 0", name="t_low_gt_0"),
         CheckConstraint(
             """
             (
@@ -177,15 +177,15 @@ class ThermoNASA(Base):
                 AND t_high IS NOT NULL
             )
             """,
-            name="thermo_nasa_temperature_bounds_all_or_none",
+            name="temperature_bounds_all_or_none",
         ),
         CheckConstraint(
             "t_low IS NULL OR t_mid IS NULL OR t_mid > t_low",
-            name="thermo_nasa_t_mid_gt_t_low",
+            name="t_mid_gt_t_low",
         ),
         CheckConstraint(
             "t_mid IS NULL OR t_high IS NULL OR t_high > t_mid",
-            name="thermo_nasa_t_high_gt_t_mid",
+            name="t_high_gt_t_mid",
         ),
     )
 

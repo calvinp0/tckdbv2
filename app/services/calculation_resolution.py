@@ -16,7 +16,7 @@ from app.schemas.refs import (
     LevelOfTheoryRef,
     WorkflowToolReleaseRef,
 )
-from app.schemas.resources.calculation import CalculationCreateResolved
+from app.schemas.entities.calculation import CalculationCreateResolved
 from app.services.software_resolution import resolve_software_release_ref
 
 

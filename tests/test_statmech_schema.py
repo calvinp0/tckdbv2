@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.schemas.resources.statmech import (
+from app.schemas.entities.statmech import (
     StatmechCreate,
     StatmechSourceCalculationCreate,
     StatmechTorsionCoordinateCreate,

@@ -114,6 +114,13 @@ enum rigid_rotor_kind {
   asymmetric_top
 }
 
+enum scan_constraint_kind {
+  bond
+  angle
+  dihedral
+  improper
+}
+
 enum scientific_origin_kind {
   computed
   experimental
@@ -205,9 +212,9 @@ Table app_user {
   created_at timestamp [not null, default: 'now']
 
   indexes {
-    username [unique, name: 'app_user_username_uq']
-    email [unique, name: 'app_user_email_uq']
-    orcid [unique, name: 'app_user_orcid_uq']
+    username [unique, name: 'uq_app_user_username']
+    email [unique, name: 'uq_app_user_email']
+    orcid [unique, name: 'uq_app_user_orcid']
   }
 
   Note: 'Application user identity used for curation provenance.'
@@ -222,7 +229,7 @@ Table author {
   created_at timestamp [not null, default: 'now']
 
   indexes {
-    orcid [unique, name: 'author_orcid_uq']
+    orcid [unique, name: 'uq_author_orcid']
   }
 }
 
@@ -241,7 +248,7 @@ Table geometry {
   created_at timestamp [not null, default: 'now']
 
   checks {
-    `natoms >= 1` [name: 'ck_geometry_geometry_natoms_ge_1']
+    `natoms >= 1` [name: 'ck_geometry_natoms_ge_1']
   }
 
   Note: 'Stores a reusable molecular geometry and its serialized XYZ form.'
@@ -260,7 +267,7 @@ Table level_of_theory {
   created_at timestamp [not null, default: 'now']
 
   indexes {
-    lot_hash [unique, name: 'lot_hash_uq']
+    lot_hash [unique, name: 'uq_level_of_theory_lot_hash']
   }
 
   Note: 'Method/basis provenance used by calculations.'
@@ -291,7 +298,7 @@ Table software {
   created_at timestamp [not null, default: 'now']
 
   indexes {
-    name [unique, name: 'software_name_uq']
+    name [unique, name: 'uq_software_name']
   }
 
   Note: 'Stable identity of a software package.'
@@ -307,11 +314,11 @@ Table species {
   created_at timestamp [not null, default: 'now']
 
   indexes {
-    inchi_key [name: 'species_inchi_key_uq', unique]
+    inchi_key [unique, name: 'uq_species_inchi_key']
   }
 
   checks {
-    `multiplicity >= 1` [name: 'ck_species_species_multiplicity_ge_1']
+    `multiplicity >= 1` [name: 'ck_species_multiplicity_ge_1']
   }
 
   Note: 'Store graph-defined species identities without resolved stereo or 3D conformers.'
@@ -324,7 +331,7 @@ Table workflow_tool {
   created_at timestamp [not null, default: 'now']
 
   indexes {
-    name [unique, name: 'workflow_tool_name_uq']
+    name [unique, name: 'uq_workflow_tool_name']
   }
 
   Note: 'Stable identity for a workflow or orchestration tool.'
@@ -343,7 +350,7 @@ Table conformer_assignment_scheme {
   created_by bigint [ref: > app_user.id]
 
   indexes {
-    (name, version) [name: 'conformer_assignment_scheme_name_version_uq', unique]
+    (name, version) [unique, name: 'uq_conformer_assignment_scheme_name']
   }
 
   Note: 'Store versioned metadata about conformer-assignment or selection logic. This table is optional in the simplified design. It is useful when the application wants to preserve provenance for how conformers were assigned or how selections such as lowest-energy/display-default were determined.'
@@ -361,6 +368,10 @@ Table geometry_atom {
     (geometry_id, atom_index) [pk]
   }
 
+  checks {
+    `atom_index >= 1` [name: 'ck_geometry_atom_atom_index_ge_1']
+  }
+
   Note: 'Stores per-atom coordinates for a geometry row.'
 }
 
@@ -371,7 +382,7 @@ Table literature_author {
 
   indexes {
     (literature_id, author_id) [pk]
-    (literature_id, author_order) [unique, name: 'literature_author_order_uq']
+    (literature_id, author_order) [unique, name: 'uq_literature_author_literature_id']
   }
 }
 
@@ -393,7 +404,7 @@ Table reaction_participant {
   }
 
   checks {
-    `stoichiometry >= 1` [name: 'ck_reaction_participant_reaction_participant_stoichiometry_ge_1']
+    `stoichiometry >= 1` [name: 'ck_reaction_participant_stoichiometry_ge_1']
   }
 
   Note: 'Compressed stoichiometric summary for a reaction graph identity. This is not an ordered participant-slot table. Repeated species on one side of a reaction are represented with `stoichiometry`.'
@@ -410,7 +421,7 @@ Table software_release {
   created_at timestamp [not null, default: 'now']
 
   indexes {
-    (software_id, version, revision, build) [name: 'software_release_dedupe_uq', unique]
+    (software_id, version, revision, build) [name: 'uq_software_release_software_id', unique]
   }
 
   Note: 'Exact release metadata for a software package. Dedupe uses `(software_id, version, revision, build)` with PostgreSQL `NULLS NOT DISTINCT`.'
@@ -433,8 +444,8 @@ Table species_entry {
   created_by bigint [ref: > app_user.id]
 
   indexes {
-    (species_id, stereo_kind, stereo_label, electronic_state_kind, electronic_state_label, term_symbol, isotopologue_label) [name: 'species_entry_identity_uq', unique]
-    species_id [name: 'species_entry_species_idx']
+    (species_id, stereo_kind, stereo_label, electronic_state_kind, electronic_state_label, term_symbol, isotopologue_label) [unique, name: 'uq_species_entry_species_id']
+    species_id [name: 'ix_species_entry_species_id']
   }
 
   Note: 'Store one stereochemically, electronically, or isotopically resolved species form. The resolved identity tuple is unique, with nullable identity components deduped in PostgreSQL using `NULLS NOT DISTINCT`.'
@@ -450,7 +461,7 @@ Table workflow_tool_release {
   created_at timestamp [not null, default: 'now']
 
   indexes {
-    (workflow_tool_id, version, git_commit) [name: 'workflow_tool_release_dedupe_uq', unique]
+    (workflow_tool_id, version, git_commit) [name: 'uq_workflow_tool_release_workflow_tool_id', unique]
   }
 
   Note: 'Exact provenance for a workflow tool code state. Dedupe uses `(workflow_tool_id, version, git_commit)` with PostgreSQL `NULLS NOT DISTINCT`.'
@@ -465,8 +476,8 @@ Table conformer_group {
   created_by bigint [ref: > app_user.id]
 
   indexes {
-    species_entry_id [name: 'conformer_group_species_entry_idx']
-    (species_entry_id, label) [name: 'conformer_group_species_entry_label_uq', unique]
+    (species_entry_id, label) [unique, name: 'uq_conformer_group_species_entry_id']
+    species_entry_id [name: 'ix_conformer_group_species_entry_id']
   }
 
   Note: 'Store one deduplicated conformational basin for a species entry.'
@@ -493,9 +504,9 @@ Table kinetics {
   created_by bigint [ref: > app_user.id]
 
   checks {
-    `tmax_k IS NULL OR tmax_k > 0` [name: 'ck_kinetics_kinetics_tmax_k_gt_0']
-    `tmin_k IS NULL OR tmin_k > 0` [name: 'ck_kinetics_kinetics_tmin_k_gt_0']
-    `tmin_k IS NULL OR tmax_k IS NULL OR tmin_k <= tmax_k` [name: 'ck_kinetics_kinetics_tmin_le_tmax']
+    `tmax_k IS NULL OR tmax_k > 0` [name: 'ck_kinetics_tmax_k_gt_0']
+    `tmin_k IS NULL OR tmin_k > 0` [name: 'ck_kinetics_tmin_k_gt_0']
+    `tmin_k IS NULL OR tmax_k IS NULL OR tmin_k <= tmax_k` [name: 'ck_kinetics_tmin_le_tmax']
   }
 
   Note: 'Kinetics records attached to a reaction entry.'
@@ -525,7 +536,11 @@ Table reaction_entry_structure_participant {
   created_by bigint [ref: > app_user.id]
 
   indexes {
-    (reaction_entry_id, role, participant_index) [unique, name: 'reaction_entry_structure_participant_order_uq']
+    (reaction_entry_id, role, participant_index) [unique, name: 'uq_reaction_entry_structure_participant_reaction_entry_id']
+  }
+
+  checks {
+    `participant_index >= 1` [name: 'ck_reaction_entry_structure_participant_participant_index_ge_1']
   }
 }
 
@@ -538,7 +553,7 @@ Table species_entry_review {
   created_at timestamp [not null, default: 'now']
 
   indexes {
-    (species_entry_id, user_id, role) [name: 'species_entry_review_uq', unique]
+    (species_entry_id, user_id, role) [unique, name: 'uq_species_entry_review_species_entry_id']
   }
 
   Note: 'Store explicit human review or curation events for species entries.'
@@ -563,11 +578,11 @@ Table statmech {
   created_by bigint [ref: > app_user.id]
 
   indexes {
-    (species_entry_id, scientific_origin, workflow_tool_release_id, software_release_id, statmech_treatment) [name: 'statmech_dedupe_uq', unique]
+    (species_entry_id, scientific_origin, literature_id, workflow_tool_release_id, software_release_id, statmech_treatment) [name: 'uq_statmech_species_entry_id', unique]
   }
 
   checks {
-    `external_symmetry IS NULL OR external_symmetry >= 1` [name: 'ck_statmech_statmech_external_symmetry_ge_1']
+    `external_symmetry IS NULL OR external_symmetry >= 1` [name: 'ck_statmech_external_symmetry_ge_1']
   }
 
   Note: 'Statistical mechanics interpretation layer for a species entry. Dedupe uses the provenance/treatment tuple with PostgreSQL `NULLS NOT DISTINCT`.'
@@ -587,7 +602,7 @@ Table thermo {
   created_by bigint [ref: > app_user.id]
 
   indexes {
-    (species_entry_id, scientific_origin, workflow_tool_release_id, software_release_id) [name: 'thermo_dedupe_uq', unique]
+    (species_entry_id, scientific_origin, workflow_tool_release_id, software_release_id) [name: 'uq_thermo_species_entry_id', unique]
   }
 
   Note: 'Thermochemistry records for a species entry. Dedupe uses the provenance tuple with PostgreSQL `NULLS NOT DISTINCT`.'
@@ -621,9 +636,9 @@ Table transport {
   created_by bigint [ref: > app_user.id]
 
   checks {
-    `epsilon_over_k_k IS NULL OR epsilon_over_k_k > 0` [name: 'ck_transport_transport_epsilon_over_k_k_gt_0']
-    `rotational_relaxation IS NULL OR rotational_relaxation >= 0` [name: 'ck_transport_transport_rotational_relaxation_ge_0']
-    `sigma_angstrom IS NULL OR sigma_angstrom > 0` [name: 'ck_transport_transport_sigma_angstrom_gt_0']
+    `epsilon_over_k_k IS NULL OR epsilon_over_k_k > 0` [name: 'ck_transport_epsilon_over_k_k_gt_0']
+    `rotational_relaxation IS NULL OR rotational_relaxation >= 0` [name: 'ck_transport_rotational_relaxation_ge_0']
+    `sigma_angstrom IS NULL OR sigma_angstrom > 0` [name: 'ck_transport_sigma_angstrom_gt_0']
   }
 
   Note: 'Transport properties attached to a species entry.'
@@ -639,7 +654,7 @@ Table conformer_selection {
   created_by bigint [ref: > app_user.id]
 
   indexes {
-    (conformer_group_id, assignment_scheme_id, selection_kind) [name: 'conformer_selection_kind_uq', unique]
+    (conformer_group_id, assignment_scheme_id, selection_kind) [unique, name: 'uq_conformer_selection_conformer_group_id']
   }
 
   Note: 'Store explicit workflow, curation, or UI selections for conformer groups. `NULL` assignment-scheme references are treated as identical for dedupe.'
@@ -689,9 +704,9 @@ Table thermo_nasa {
   b7 double
 
   checks {
-    `t_mid IS NULL OR t_high IS NULL OR t_high > t_mid` [name: 'ck_thermo_nasa_thermo_nasa_t_high_gt_t_mid']
-    `t_low IS NULL OR t_low > 0` [name: 'ck_thermo_nasa_thermo_nasa_t_low_gt_0']
-    `t_low IS NULL OR t_mid IS NULL OR t_mid > t_low` [name: 'ck_thermo_nasa_thermo_nasa_t_mid_gt_t_low']
+    `t_mid IS NULL OR t_high IS NULL OR t_high > t_mid` [name: 'ck_thermo_nasa_t_high_gt_t_mid']
+    `t_low IS NULL OR t_low > 0` [name: 'ck_thermo_nasa_t_low_gt_0']
+    `t_low IS NULL OR t_mid IS NULL OR t_mid > t_low` [name: 'ck_thermo_nasa_t_mid_gt_t_low']
     `(
                 t_low IS NULL
                 AND t_mid IS NULL
@@ -702,7 +717,7 @@ Table thermo_nasa {
                 t_low IS NOT NULL
                 AND t_mid IS NOT NULL
                 AND t_high IS NOT NULL
-            )` [name: 'ck_thermo_nasa_thermo_nasa_temperature_bounds_all_or_none']
+            )` [name: 'ck_thermo_nasa_temperature_bounds_all_or_none']
   }
 
   Note: 'NASA polynomial coefficients for a thermo record.'
@@ -734,11 +749,11 @@ Table transition_state_entry {
   created_by bigint [ref: > app_user.id]
 
   indexes {
-    (id, transition_state_id) [unique, name: 'transition_state_entry_id_transition_state_id_uq']
+    (id, transition_state_id) [unique, name: 'uq_transition_state_entry_id']
   }
 
   checks {
-    `multiplicity >= 1` [name: 'ck_transition_state_entry_transition_state_entry_multiplicity_ge_1']
+    `multiplicity >= 1` [name: 'ck_transition_state_entry_multiplicity_ge_1']
   }
 
   Note: 'One candidate transition-state geometry family member under a TS concept. Calculations refine or validate this candidate, and selection rows can mark which entry is preferred for kinetics or display.'
@@ -766,7 +781,7 @@ Table calculation {
                 (
                     transition_state_entry_id IS NULL
                     AND species_entry_id IS NOT NULL
-                )` [name: 'ck_calculation_exactly_one_owner']
+                )` [name: 'ck_calculation_one_owner']
   }
 
   Note: 'Computational record owned by exactly one species or transition-state entry.'
@@ -782,7 +797,7 @@ Table transition_state_selection {
   created_by bigint [ref: > app_user.id]
 
   indexes {
-    (transition_state_id, selection_kind) [unique, name: 'transition_state_selection_kind_uq']
+    (transition_state_id, selection_kind) [unique, name: 'uq_transition_state_selection_transition_state_id']
   }
 
   Note: 'Selection and curation layer for transition-state entries. The selected entry must belong to the same transition-state concept as the `transition_state_id` on this row.'
@@ -802,8 +817,93 @@ Table calc_opt_result {
   final_energy_hartree double
 
   checks {
-    `n_steps IS NULL OR n_steps >= 0` [name: 'ck_calc_opt_result_calc_opt_result_n_steps_ge_0']
+    `n_steps IS NULL OR n_steps >= 0` [name: 'ck_calc_opt_result_n_steps_ge_0']
   }
+}
+
+Table calc_scan_constraint {
+  calculation_id bigint [not null, ref: > calculation.id]
+  constraint_index int [not null]
+  constraint_kind scan_constraint_kind [not null]
+  atom1_index int [not null]
+  atom2_index int [not null]
+  atom3_index int
+  atom4_index int
+  target_value double
+
+  indexes {
+    (calculation_id, constraint_index) [pk]
+  }
+
+  checks {
+    `atom1_index >= 1` [name: 'ck_calc_scan_constraint_atom1_index_ge_1']
+    `atom2_index >= 1` [name: 'ck_calc_scan_constraint_atom2_index_ge_1']
+    `atom3_index IS NULL OR atom3_index >= 1` [name: 'ck_calc_scan_constraint_atom3_index_ge_1']
+    `atom4_index IS NULL OR atom4_index >= 1` [name: 'ck_calc_scan_constraint_atom4_index_ge_1']
+    `constraint_index >= 1` [name: 'ck_calc_scan_constraint_constraint_index_ge_1']
+  }
+
+  Note: 'Constraint metadata attached to a scan calculation.'
+}
+
+Table calc_scan_coordinate {
+  calculation_id bigint [not null, ref: > calculation.id]
+  coordinate_index int [not null]
+  atom1_index int [not null]
+  atom2_index int [not null]
+  atom3_index int [not null]
+  atom4_index int [not null]
+  resolution_degrees int
+  symmetry_number smallint
+
+  indexes {
+    (calculation_id, coordinate_index) [pk]
+  }
+
+  checks {
+    `atom1_index >= 1` [name: 'ck_calc_scan_coordinate_atom1_index_ge_1']
+    `atom2_index >= 1` [name: 'ck_calc_scan_coordinate_atom2_index_ge_1']
+    `atom3_index >= 1` [name: 'ck_calc_scan_coordinate_atom3_index_ge_1']
+    `atom4_index >= 1` [name: 'ck_calc_scan_coordinate_atom4_index_ge_1']
+    `coordinate_index >= 1` [name: 'ck_calc_scan_coordinate_coordinate_index_ge_1']
+    `resolution_degrees IS NULL OR resolution_degrees >= 1` [name: 'ck_calc_scan_coordinate_resolution_degrees_ge_1']
+    `symmetry_number IS NULL OR symmetry_number >= 1` [name: 'ck_calc_scan_coordinate_symmetry_number_ge_1']
+  }
+
+  Note: 'Definition of one scanned internal coordinate.'
+}
+
+Table calc_scan_point {
+  calculation_id bigint [not null, ref: > calculation.id]
+  point_index int [not null]
+  electronic_energy_hartree double
+  relative_energy_kj_mol double
+  geometry_id bigint [ref: > geometry.id]
+  note text
+
+  indexes {
+    (calculation_id, point_index) [pk]
+  }
+
+  checks {
+    `point_index >= 1` [name: 'ck_calc_scan_point_point_index_ge_1']
+  }
+
+  Note: 'One sampled point on a scan surface.'
+}
+
+Table calc_scan_result {
+  calculation_id bigint [pk, not null, ref: > calculation.id]
+  dimension int [not null]
+  is_relaxed bool
+  zero_energy_reference_hartree double
+  note text
+
+  checks {
+    `dimension >= 1` [name: 'ck_calc_scan_result_dimension_ge_1']
+  }
+
+  Note: 'Scan-level metadata for a scan calculation.'
 }
 
 Table calc_sp_result {
@@ -828,15 +928,15 @@ Table calculation_dependency {
 
   indexes {
     (parent_calculation_id, child_calculation_id) [pk]
-    child_calculation_id [name: 'calculation_dependency_child_freq_on_uq', note: 'Partial index WHERE dependency_role = \'freq_on\'']
-    child_calculation_id [name: 'calculation_dependency_child_neb_parent_uq', note: 'Partial index WHERE dependency_role = \'neb_parent\'']
-    child_calculation_id [name: 'calculation_dependency_child_optimized_from_uq', note: 'Partial index WHERE dependency_role = \'optimized_from\'']
-    child_calculation_id [name: 'calculation_dependency_child_scan_parent_uq', note: 'Partial index WHERE dependency_role = \'scan_parent\'']
-    child_calculation_id [name: 'calculation_dependency_child_single_point_on_uq', note: 'Partial index WHERE dependency_role = \'single_point_on\'']
+    child_calculation_id [name: 'uq_calculation_dependency_child_calculation_id_freq_on', note: 'Partial index WHERE dependency_role = \'freq_on\'']
+    child_calculation_id [name: 'uq_calculation_dependency_child_calculation_id_neb_parent', note: 'Partial index WHERE dependency_role = \'neb_parent\'']
+    child_calculation_id [name: 'uq_calculation_dependency_child_calculation_id_optimized_from', note: 'Partial index WHERE dependency_role = \'optimized_from\'']
+    child_calculation_id [name: 'uq_calculation_dependency_child_calculation_id_scan_parent', note: 'Partial index WHERE dependency_role = \'scan_parent\'']
+    child_calculation_id [name: 'uq_calculation_dependency_child_calculation_id_single_point_on', note: 'Partial index WHERE dependency_role = \'single_point_on\'']
   }
 
   checks {
-    `parent_calculation_id <> child_calculation_id` [name: 'ck_calculation_dependency_calculation_dependency_not_self']
+    `parent_calculation_id <> child_calculation_id` [name: 'ck_calculation_dependency_not_self']
   }
 
   Note: 'Directed dependency edge between two calculations. Self-edges are forbidden in the schema. Stronger role-specific parent-count rules or full DAG validation belong in application logic unless the policy is narrowed enough for partial unique indexes. Selected roles currently enforce at most one parent per child: `optimized_from`, `freq_on`, `single_point_on`, `scan_parent`, and `neb_parent`.'
@@ -849,11 +949,11 @@ Table calculation_input_geometry {
 
   indexes {
     (calculation_id, input_order) [pk]
-    (calculation_id, geometry_id) [unique, name: 'uq_calculation_input_geometry']
+    (calculation_id, geometry_id) [unique, name: 'uq_calculation_input_geometry_calculation_id']
   }
 
   checks {
-    `input_order >= 1` [name: 'ck_calculation_input_geometry_calculation_input_order_ge_1']
+    `input_order >= 1` [name: 'ck_calculation_input_geometry_input_order_ge_1']
   }
 
   Note: 'Ordered input-geometry link table for a calculation.'
@@ -867,11 +967,11 @@ Table calculation_output_geometry {
 
   indexes {
     (calculation_id, output_order) [pk]
-    (calculation_id, geometry_id) [unique, name: 'uq_calculation_output_geometry_calculation_geometry']
+    (calculation_id, geometry_id) [unique, name: 'uq_calculation_output_geometry_calculation_id']
   }
 
   checks {
-    `output_order >= 1` [name: 'ck_calculation_output_geometry_calculation_output_order_ge_1']
+    `output_order >= 1` [name: 'ck_calculation_output_geometry_output_order_ge_1']
   }
 }
 
@@ -886,8 +986,8 @@ Table conformer_observation {
   created_by bigint [ref: > app_user.id]
 
   indexes {
-    calculation_id [name: 'conformer_calculation_uq', unique]
-    conformer_group_id [name: 'conformer_group_idx']
+    calculation_id [unique, name: 'uq_conformer_observation_calculation_id']
+    conformer_group_id [name: 'ix_conformer_observation_conformer_group_id']
   }
 
   Note: 'Store one uploaded or imported conformer observation assigned to a group.'
@@ -929,8 +1029,14 @@ Table statmech_torsion {
   note text
   source_scan_calculation_id bigint [ref: > calculation.id]
 
+  indexes {
+    (statmech_id, torsion_index) [name: 'uq_statmech_torsion_statmech_id', unique]
+  }
+
   checks {
-    `dimension >= 1` [name: 'ck_statmech_torsion_statmech_torsion_dimension_ge_1']
+    `dimension >= 1` [name: 'ck_statmech_torsion_dimension_ge_1']
+    `symmetry_number IS NULL OR symmetry_number >= 1` [name: 'ck_statmech_torsion_symmetry_number_ge_1']
+    `torsion_index >= 1` [name: 'ck_statmech_torsion_torsion_index_ge_1']
   }
 
   Note: 'Stores one torsion associated with a statmech record.'
@@ -948,6 +1054,24 @@ Table thermo_source_calculation {
   Note: 'Links thermo records to supporting calculations by role.'
 }
 
+Table calc_scan_point_coordinate_value {
+  calculation_id bigint [not null]
+  point_index int [not null, ref: > calc_scan_point.point_index]
+  coordinate_index int [not null, ref: > calc_scan_coordinate.coordinate_index]
+  angle_degrees double [not null]
+
+  indexes {
+    (calculation_id, point_index, coordinate_index) [pk]
+  }
+
+  checks {
+    `coordinate_index >= 1` [name: 'ck_calc_scan_point_coordinate_value_coordinate_index_ge_1']
+    `point_index >= 1` [name: 'ck_calc_scan_point_coordinate_value_point_index_ge_1']
+  }
+
+  Note: 'Coordinate values for one sampled scan point.'
+}
+
 Table statmech_torsion_definition {
   torsion_id bigint [not null, ref: > statmech_torsion.id]
   coordinate_index int [not null]
@@ -961,14 +1085,18 @@ Table statmech_torsion_definition {
   }
 
   checks {
-    `atom1_index >= 1` [name: 'ck_statmech_torsion_definition_statmech_torsion_atom1_ge_1']
-    `atom2_index >= 1` [name: 'ck_statmech_torsion_definition_statmech_torsion_atom2_ge_1']
-    `atom3_index >= 1` [name: 'ck_statmech_torsion_definition_statmech_torsion_atom3_ge_1']
-    `atom4_index >= 1` [name: 'ck_statmech_torsion_definition_statmech_torsion_atom4_ge_1']
-    `coordinate_index >= 1` [name: 'ck_statmech_torsion_definition_statmech_torsion_coord_index_ge_1']
+    `atom1_index >= 1` [name: 'ck_statmech_torsion_definition_atom1_index_ge_1']
+    `atom2_index >= 1` [name: 'ck_statmech_torsion_definition_atom2_index_ge_1']
+    `atom3_index >= 1` [name: 'ck_statmech_torsion_definition_atom3_index_ge_1']
+    `atom4_index >= 1` [name: 'ck_statmech_torsion_definition_atom4_index_ge_1']
+    `coordinate_index >= 1` [name: 'ck_statmech_torsion_definition_coordinate_index_ge_1']
   }
 
   Note: 'Atom indices for a torsional coordinate.'
 }
 
 Ref fk_transition_state_selection_entry_with_parent: transition_state_selection.(transition_state_entry_id, transition_state_id) > transition_state_entry.(id, transition_state_id)
+
+Ref fk_calc_scan_point_coordinate_value_calculation_id_calc_scan_coordinate: calc_scan_point_coordinate_value.(calculation_id, coordinate_index) > calc_scan_coordinate.(calculation_id, coordinate_index)
+
+Ref fk_calc_scan_point_coordinate_value_calculation_id_calc_scan_point: calc_scan_point_coordinate_value.(calculation_id, point_index) > calc_scan_point.(calculation_id, point_index)

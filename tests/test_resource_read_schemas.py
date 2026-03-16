@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.schemas.resources.calculation import (
+from app.schemas.entities.calculation import (
     CalculationDependencyRead,
     CalculationInputGeometryRead,
     CalculationScanResultRead,
 )
-from app.schemas.resources.reaction import ReactionParticipantRead
-from app.schemas.resources.statmech import (
+from app.schemas.entities.reaction import ReactionParticipantRead
+from app.schemas.entities.statmech import (
     StatmechSourceCalculationRead,
     StatmechTorsionRead,
     StatmechTorsionCoordinateRead,

@@ -11,6 +11,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
@@ -63,8 +64,8 @@ class Species(Base, TimestampMixin):
     )
 
     __table_args__ = (
-        Index("species_inchi_key_uq", "inchi_key", unique=True),
-        CheckConstraint("multiplicity >= 1", name="species_multiplicity_ge_1"),
+        UniqueConstraint("inchi_key"),
+        CheckConstraint("multiplicity >= 1", name="multiplicity_ge_1"),
     )
 
     @property
@@ -172,9 +173,8 @@ class SpeciesEntry(Base, TimestampMixin, CreatedByMixin):
     )
 
     __table_args__ = (
-        Index("species_entry_species_idx", "species_id"),
-        Index(
-            "species_entry_identity_uq",
+        Index("ix_species_entry_species_id", "species_id"),
+        UniqueConstraint(
             "species_id",
             "stereo_kind",
             "stereo_label",
@@ -182,7 +182,7 @@ class SpeciesEntry(Base, TimestampMixin, CreatedByMixin):
             "electronic_state_label",
             "term_symbol",
             "isotopologue_label",
-            unique=True,
+            name="uq_species_entry_species_id",
             postgresql_nulls_not_distinct=True,
         ),
     )
@@ -219,12 +219,11 @@ class ConformerGroup(Base, TimestampMixin, CreatedByMixin):
     )
 
     __table_args__ = (
-        Index("conformer_group_species_entry_idx", "species_entry_id"),
-        Index(
-            "conformer_group_species_entry_label_uq",
+        Index("ix_conformer_group_species_entry_id", "species_entry_id"),
+        UniqueConstraint(
             "species_entry_id",
             "label",
-            unique=True,
+            name="uq_conformer_group_species_entry_id",
         ),
     )
 
@@ -276,8 +275,8 @@ class ConformerObservation(Base, TimestampMixin, CreatedByMixin):
     )
 
     __table_args__ = (
-        Index("conformer_calculation_uq", "calculation_id", unique=True),
-        Index("conformer_group_idx", "conformer_group_id"),
+        UniqueConstraint("calculation_id"),
+        Index("ix_conformer_observation_conformer_group_id", "conformer_group_id"),
     )
 
 
@@ -322,12 +321,11 @@ class ConformerSelection(Base, TimestampMixin, CreatedByMixin):
     )
 
     __table_args__ = (
-        Index(
-            "conformer_selection_kind_uq",
+        UniqueConstraint(
             "conformer_group_id",
             "assignment_scheme_id",
             "selection_kind",
-            unique=True,
+            name="uq_conformer_selection_conformer_group_id",
             postgresql_nulls_not_distinct=True,
         ),
     )
@@ -375,11 +373,10 @@ class ConformerAssignmentScheme(Base, TimestampMixin, CreatedByMixin):
     )
 
     __table_args__ = (
-        Index(
-            "conformer_assignment_scheme_name_version_uq",
+        UniqueConstraint(
             "name",
             "version",
-            unique=True,
+            name="uq_conformer_assignment_scheme_name",
         ),
     )
 
@@ -413,11 +410,10 @@ class SpeciesEntryReview(Base, TimestampMixin):
     species_entry: Mapped["SpeciesEntry"] = relationship(back_populates="reviews")
 
     __table_args__ = (
-        Index(
-            "species_entry_review_uq",
+        UniqueConstraint(
             "species_entry_id",
             "user_id",
             "role",
-            unique=True,
+            name="uq_species_entry_review_species_entry_id",
         ),
     )

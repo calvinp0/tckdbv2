@@ -30,4 +30,4 @@ class LevelOfTheory(Base, TimestampMixin):
 
     calculations: Mapped[list["Calculation"]] = relationship(back_populates="lot")
 
-    __table_args__ = (UniqueConstraint("lot_hash", name="lot_hash_uq"),)
+    __table_args__ = (UniqueConstraint("lot_hash"),)

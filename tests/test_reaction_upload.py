@@ -19,8 +19,8 @@ from app.db.models.reaction import (
 from app.db.models.species import ConformerGroup, Species, SpeciesEntry
 from app.schemas.workflows.conformer_upload import ConformerUploadRequest
 from app.schemas.workflows.reaction_upload import ReactionUploadRequest
-from app.services.conformer_workflow import persist_conformer_upload
-from app.services.reaction_workflow import persist_reaction_upload
+from app.workflows.conformer import persist_conformer_upload
+from app.workflows.reaction import persist_reaction_upload
 
 
 def _make_species_entry(

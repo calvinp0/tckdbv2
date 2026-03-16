@@ -26,4 +26,4 @@ class Author(Base, TimestampMixin):
         cascade="all, delete-orphan",
     )
 
-    __table_args__ = (UniqueConstraint("orcid", name="author_orcid_uq"),)
+    __table_args__ = (UniqueConstraint("orcid"),)

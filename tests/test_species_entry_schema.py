@@ -1,5 +1,5 @@
 from app.db.models.common import SpeciesEntryStereoKind
-from app.schemas.resources.species_entry import SpeciesEntryCreate, SpeciesEntryUpdate
+from app.schemas.entities.species_entry import SpeciesEntryCreate, SpeciesEntryUpdate
 
 
 def test_species_entry_create_normalizes_identity_text_fields() -> None:

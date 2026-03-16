@@ -21,7 +21,7 @@ The literature flow is split into three layers.
 
 Resource schemas represent stored literature rows.
 
-- [app/schemas/resources/literature.py](/home/calvin/code/TCKDB_v2/app/schemas/resources/literature.py)
+- [app/schemas/entities/literature.py](/home/calvin/code/TCKDB_v2/app/schemas/entities/literature.py)
 
 Important shapes:
 

@@ -76,14 +76,14 @@ class Transport(Base, TimestampMixin, CreatedByMixin):
     __table_args__ = (
         CheckConstraint(
             "sigma_angstrom IS NULL OR sigma_angstrom > 0",
-            name="transport_sigma_angstrom_gt_0",
+            name="sigma_angstrom_gt_0",
         ),
         CheckConstraint(
             "epsilon_over_k_k IS NULL OR epsilon_over_k_k > 0",
-            name="transport_epsilon_over_k_k_gt_0",
+            name="epsilon_over_k_k_gt_0",
         ),
         CheckConstraint(
             "rotational_relaxation IS NULL OR rotational_relaxation >= 0",
-            name="transport_rotational_relaxation_ge_0",
+            name="rotational_relaxation_ge_0",
         ),
     )

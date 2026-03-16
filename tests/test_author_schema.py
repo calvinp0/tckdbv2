@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.resources.author import AuthorCreate, AuthorUpdate
+from app.schemas.entities.author import AuthorCreate, AuthorUpdate
 
 
 def test_author_create_derives_full_name_from_given_and_family_name() -> None:

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.resources.literature import LiteratureCreate, LiteratureUpdate
+from app.schemas.entities.literature import LiteratureCreate, LiteratureUpdate
 from app.services.literature_metadata import normalize_doi, normalize_isbn
 
 

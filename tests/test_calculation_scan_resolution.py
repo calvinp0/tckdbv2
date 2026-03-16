@@ -5,7 +5,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.db.models.calculation import CalculationScanResult
-from app.schemas.resources.calculation import CalculationScanResultCreate
+from app.schemas.entities.calculation import CalculationScanResultCreate
 from app.services.calculation_scan_resolution import persist_calculation_scan
 
 

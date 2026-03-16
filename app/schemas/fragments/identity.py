@@ -7,7 +7,7 @@ from app.db.models.common import (
     StationaryPointKind,
 )
 from app.schemas.common import SchemaBase
-from app.schemas.resources.species_entry import SpeciesEntryIdentityValidatorMixin
+from app.schemas.entities.species_entry import SpeciesEntryIdentityValidatorMixin
 from app.schemas.utils import normalize_required_text
 
 

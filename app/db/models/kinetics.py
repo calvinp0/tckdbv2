@@ -95,11 +95,11 @@ class Kinetics(Base, TimestampMixin, CreatedByMixin):
     )
 
     __table_args__ = (
-        CheckConstraint("tmin_k IS NULL OR tmin_k > 0", name="kinetics_tmin_k_gt_0"),
-        CheckConstraint("tmax_k IS NULL OR tmax_k > 0", name="kinetics_tmax_k_gt_0"),
+        CheckConstraint("tmin_k IS NULL OR tmin_k > 0", name="tmin_k_gt_0"),
+        CheckConstraint("tmax_k IS NULL OR tmax_k > 0", name="tmax_k_gt_0"),
         CheckConstraint(
             "tmin_k IS NULL OR tmax_k IS NULL OR tmin_k <= tmax_k",
-            name="kinetics_tmin_le_tmax",
+            name="tmin_le_tmax",
         ),
     )
 

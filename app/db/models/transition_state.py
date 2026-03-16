@@ -100,10 +100,10 @@ class TransitionStateEntry(Base, TimestampMixin, CreatedByMixin):
         UniqueConstraint(
             "id",
             "transition_state_id",
-            name="transition_state_entry_id_transition_state_id_uq",
+            name="uq_transition_state_entry_id",
         ),
         CheckConstraint(
-            "multiplicity >= 1", name="transition_state_entry_multiplicity_ge_1"
+            "multiplicity >= 1", name="multiplicity_ge_1"
         ),
     )
 
@@ -154,6 +154,6 @@ class TransitionStateSelection(Base, TimestampMixin, CreatedByMixin):
         UniqueConstraint(
             "transition_state_id",
             "selection_kind",
-            name="transition_state_selection_kind_uq",
+            name="uq_transition_state_selection_transition_state_id",
         ),
     )

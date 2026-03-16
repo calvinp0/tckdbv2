@@ -31,7 +31,7 @@ class AppUser(Base, TimestampMixin):
     )
 
     __table_args__ = (
-        UniqueConstraint("username", name="app_user_username_uq"),
-        UniqueConstraint("email", name="app_user_email_uq"),
-        UniqueConstraint("orcid", name="app_user_orcid_uq"),
+        UniqueConstraint("username"),
+        UniqueConstraint("email"),
+        UniqueConstraint("orcid"),
     )

@@ -174,7 +174,7 @@ class Calculation(Base, TimestampMixin, CreatedByMixin):
                     AND species_entry_id IS NOT NULL
                 )
                 """,
-            name="exactly_one_owner",
+            name="one_owner",
         ),
     )
 
@@ -202,9 +202,11 @@ class CalculationInputGeometry(Base):
     __table_args__ = (
         PrimaryKeyConstraint("calculation_id", "input_order"),
         UniqueConstraint(
-            "calculation_id", "geometry_id", name="uq_calculation_input_geometry"
+            "calculation_id",
+            "geometry_id",
+            name="uq_calculation_input_geometry_calculation_id",
         ),
-        CheckConstraint("input_order >= 1", name="calculation_input_order_ge_1"),
+        CheckConstraint("input_order >= 1", name="input_order_ge_1"),
     )
 
 
@@ -234,9 +236,9 @@ class CalculationOutputGeometry(Base):
         UniqueConstraint(
             "calculation_id",
             "geometry_id",
-            name="uq_calculation_output_geometry_calculation_geometry",
+            name="uq_calculation_output_geometry_calculation_id",
         ),
-        CheckConstraint("output_order >= 1", name="calculation_output_order_ge_1"),
+        CheckConstraint("output_order >= 1", name="output_order_ge_1"),
     )
 
 
@@ -277,34 +279,34 @@ class CalculationDependency(Base):
     __table_args__ = (
         CheckConstraint(
             "parent_calculation_id <> child_calculation_id",
-            name="calculation_dependency_not_self",
+            name="not_self",
         ),
         Index(
-            "calculation_dependency_child_optimized_from_uq",
+            "uq_calculation_dependency_child_calculation_id_optimized_from",
             "child_calculation_id",
             unique=True,
             postgresql_where=text("dependency_role = 'optimized_from'"),
         ),
         Index(
-            "calculation_dependency_child_freq_on_uq",
+            "uq_calculation_dependency_child_calculation_id_freq_on",
             "child_calculation_id",
             unique=True,
             postgresql_where=text("dependency_role = 'freq_on'"),
         ),
         Index(
-            "calculation_dependency_child_single_point_on_uq",
+            "uq_calculation_dependency_child_calculation_id_single_point_on",
             "child_calculation_id",
             unique=True,
             postgresql_where=text("dependency_role = 'single_point_on'"),
         ),
         Index(
-            "calculation_dependency_child_scan_parent_uq",
+            "uq_calculation_dependency_child_calculation_id_scan_parent",
             "child_calculation_id",
             unique=True,
             postgresql_where=text("dependency_role = 'scan_parent'"),
         ),
         Index(
-            "calculation_dependency_child_neb_parent_uq",
+            "uq_calculation_dependency_child_calculation_id_neb_parent",
             "child_calculation_id",
             unique=True,
             postgresql_where=text("dependency_role = 'neb_parent'"),
@@ -341,7 +343,7 @@ class CalculationOptResult(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "n_steps IS NULL OR n_steps >= 0", name="calc_opt_result_n_steps_ge_0"
+            "n_steps IS NULL OR n_steps >= 0", name="n_steps_ge_0"
         ),
     )
 
@@ -405,7 +407,7 @@ class CalculationScanResult(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("dimension >= 1", name="calc_scan_result_dimension_ge_1"),
+        CheckConstraint("dimension >= 1", name="dimension_ge_1"),
     )
 
 
@@ -437,18 +439,18 @@ class CalculationScanCoordinate(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("coordinate_index >= 1", name="calc_scan_coordinate_index_ge_1"),
-        CheckConstraint("atom1_index >= 1", name="calc_scan_coordinate_atom1_ge_1"),
-        CheckConstraint("atom2_index >= 1", name="calc_scan_coordinate_atom2_ge_1"),
-        CheckConstraint("atom3_index >= 1", name="calc_scan_coordinate_atom3_ge_1"),
-        CheckConstraint("atom4_index >= 1", name="calc_scan_coordinate_atom4_ge_1"),
+        CheckConstraint("coordinate_index >= 1", name="coordinate_index_ge_1"),
+        CheckConstraint("atom1_index >= 1", name="atom1_index_ge_1"),
+        CheckConstraint("atom2_index >= 1", name="atom2_index_ge_1"),
+        CheckConstraint("atom3_index >= 1", name="atom3_index_ge_1"),
+        CheckConstraint("atom4_index >= 1", name="atom4_index_ge_1"),
         CheckConstraint(
             "resolution_degrees IS NULL OR resolution_degrees >= 1",
-            name="calc_scan_coordinate_resolution_degrees_ge_1",
+            name="resolution_degrees_ge_1",
         ),
         CheckConstraint(
             "symmetry_number IS NULL OR symmetry_number >= 1",
-            name="calc_scan_coordinate_symmetry_number_ge_1",
+            name="symmetry_number_ge_1",
         ),
     )
 
@@ -480,17 +482,17 @@ class CalculationScanConstraint(Base):
     __table_args__ = (
         CheckConstraint(
             "constraint_index >= 1",
-            name="calc_scan_constraint_index_ge_1",
+            name="constraint_index_ge_1",
         ),
-        CheckConstraint("atom1_index >= 1", name="calc_scan_constraint_atom1_ge_1"),
-        CheckConstraint("atom2_index >= 1", name="calc_scan_constraint_atom2_ge_1"),
+        CheckConstraint("atom1_index >= 1", name="atom1_index_ge_1"),
+        CheckConstraint("atom2_index >= 1", name="atom2_index_ge_1"),
         CheckConstraint(
             "atom3_index IS NULL OR atom3_index >= 1",
-            name="calc_scan_constraint_atom3_ge_1",
+            name="atom3_index_ge_1",
         ),
         CheckConstraint(
             "atom4_index IS NULL OR atom4_index >= 1",
-            name="calc_scan_constraint_atom4_ge_1",
+            name="atom4_index_ge_1",
         ),
     )
 
@@ -527,7 +529,7 @@ class CalculationScanPoint(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("point_index >= 1", name="calc_scan_point_index_ge_1"),
+        CheckConstraint("point_index >= 1", name="point_index_ge_1"),
     )
 
 
@@ -568,11 +570,11 @@ class CalculationScanPointCoordinateValue(Base):
         ),
         CheckConstraint(
             "point_index >= 1",
-            name="calc_scan_point_coordinate_value_point_index_ge_1",
+            name="point_index_ge_1",
         ),
         CheckConstraint(
             "coordinate_index >= 1",
-            name="calc_scan_point_coordinate_value_coordinate_index_ge_1",
+            name="coordinate_index_ge_1",
         ),
     )
 

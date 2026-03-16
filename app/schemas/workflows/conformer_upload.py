@@ -13,7 +13,7 @@ from app.schemas.fragments.calculation import CalculationPayload
 from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
 from app.schemas.geometry import GeometryPayload
 from app.schemas.refs import SoftwareReleaseRef, WorkflowToolReleaseRef
-from app.schemas.resources.statmech import (
+from app.schemas.entities.statmech import (
     StatmechSourceCalculationCreate,
     StatmechTorsionCreate,
 )

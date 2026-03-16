@@ -74,7 +74,7 @@ class ReactionParticipant(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "stoichiometry >= 1", name="reaction_participant_stoichiometry_ge_1"
+            "stoichiometry >= 1", name="stoichiometry_ge_1"
         ),
     )
 
@@ -138,12 +138,12 @@ class ReactionEntryStructureParticipant(Base, TimestampMixin, CreatedByMixin):
     __table_args__ = (
         CheckConstraint(
             "participant_index >= 1",
-            name="reaction_entry_participant_index_ge_1",
+            name="participant_index_ge_1",
         ),
         UniqueConstraint(
             "reaction_entry_id",
             "role",
             "participant_index",
-            name="reaction_entry_structure_participant_order_uq",
+            name="uq_reaction_entry_structure_participant_reaction_entry_id",
         ),
     )

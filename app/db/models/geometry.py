@@ -36,7 +36,7 @@ class Geometry(Base, TimestampMixin):
         back_populates="geometry",
     )
 
-    __table_args__ = (CheckConstraint("natoms >= 1", name="geometry_natoms_ge_1"),)
+    __table_args__ = (CheckConstraint("natoms >= 1", name="natoms_ge_1"),)
 
 
 class GeometryAtom(Base):
@@ -58,5 +58,5 @@ class GeometryAtom(Base):
     geometry: Mapped[Geometry] = relationship(back_populates="atoms")
 
     __table_args__ = (
-        CheckConstraint("atom_index >= 1", name="geometry_atom_index_ge_1"),
+        CheckConstraint("atom_index >= 1", name="atom_index_ge_1"),
     )
