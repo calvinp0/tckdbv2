@@ -1,9 +1,10 @@
 from typing import Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from app.schemas.common import SchemaBase
 from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
+from app.schemas.reaction_family import find_canonical_reaction_family
 from app.schemas.utils import normalize_optional_text
 
 
@@ -37,10 +38,36 @@ class ReactionUploadRequest(SchemaBase):
     ordered structured participants for the resolved species-entry forms.
 
     :param reversible: Whether the uploaded reaction is reversible.
+    :param reaction_family: Optional reaction-family label.
+    :param reaction_family_source_note: Required when ``reaction_family`` is not a supported canonical family.
     :param reactants: Ordered structured participants on the reactant side.
     :param products: Ordered structured participants on the product side.
     """
 
     reversible: bool
+    reaction_family: str | None = None
+    reaction_family_source_note: str | None = None
     reactants: list[ReactionParticipantUpload] = Field(min_length=1)
     products: list[ReactionParticipantUpload] = Field(min_length=1)
+
+    @field_validator("reaction_family", "reaction_family_source_note")
+    @classmethod
+    def normalize_reaction_family(cls, value: str | None) -> str | None:
+        return normalize_optional_text(value)
+
+    @model_validator(mode="after")
+    def validate_reaction_family(self) -> Self:
+        if self.reaction_family is None:
+            if self.reaction_family_source_note is not None:
+                raise ValueError(
+                    "reaction_family_source_note requires reaction_family."
+                )
+            return self
+
+        if find_canonical_reaction_family(self.reaction_family) is None:
+            if self.reaction_family_source_note is None:
+                raise ValueError(
+                    "reaction_family_source_note is required when reaction_family "
+                    "is not a supported canonical family."
+                )
+        return self

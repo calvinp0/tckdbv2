@@ -25,6 +25,17 @@ if TYPE_CHECKING:
     from app.db.models.transition_state import TransitionState
 
 
+class ReactionFamily(Base, TimestampMixin):
+    __tablename__ = "reaction_family"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+
+    reactions: Mapped[list["ChemReaction"]] = relationship(
+        back_populates="reaction_family"
+    )
+
+
 class ChemReaction(Base, TimestampMixin):
     __tablename__ = "chem_reaction"
 
@@ -33,14 +44,33 @@ class ChemReaction(Base, TimestampMixin):
         CHAR(64), unique=True, nullable=True
     )
     reversible: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    reaction_family_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("reaction_family.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=True,
+    )
+    reaction_family_raw: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reaction_family_source_note: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
 
     participants: Mapped[list["ReactionParticipant"]] = relationship(
         back_populates="reaction",
         cascade="all, delete-orphan",
     )
+    reaction_family: Mapped[Optional["ReactionFamily"]] = relationship(
+        back_populates="reactions"
+    )
     entries: Mapped[list["ReactionEntry"]] = relationship(
         back_populates="reaction",
         cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "reaction_family_raw IS NULL OR reaction_family_source_note IS NOT NULL",
+            name="reaction_family_raw_requires_source_note",
+        ),
     )
 
 

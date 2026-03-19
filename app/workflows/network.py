@@ -40,6 +40,10 @@ def persist_network_upload(
             session,
             ReactionUploadRequest(
                 reversible=reaction.reaction.reversible,
+                reaction_family=reaction.reaction.reaction_family,
+                reaction_family_source_note=(
+                    reaction.reaction.reaction_family_source_note
+                ),
                 reactants=[
                     {
                         "species_entry": participant.species_entry,

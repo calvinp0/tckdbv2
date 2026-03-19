@@ -1,0 +1,539 @@
+"""Workflow orchestration for pressure-dependent network uploads.
+
+Pipeline (single transaction):
+1. Resolve species (local key → species_entry)
+2. Process conformers (geometry + opt calc + conformer group/observation)
+3. Process species-level additional calculations (sp, freq — with geometry_key lookups)
+4. Resolve micro reactions (local key → reaction_entry)
+5. Process transition states (TS → TS entry → geometry → calcs)
+6. Create network + states + channels + flat membership + reaction links
+7. Create solve (with source_calculations using calc key→id map)
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+
+from sqlalchemy.orm import Session
+
+import app.db.models  # noqa: F401
+from app.db.models.calculation import (
+    CalculationFreqResult,
+    CalculationOptResult,
+    CalculationOutputGeometry,
+    CalculationSPResult,
+)
+from app.db.models.common import (
+    CalculationGeometryRole,
+    NetworkSpeciesRole,
+)
+from app.db.models.network import Network, NetworkReaction, NetworkSpecies
+from app.db.models.network_pdep import (
+    NetworkChannel,
+    NetworkSolve,
+    NetworkSolveBathGas,
+    NetworkSolveEnergyTransfer,
+    NetworkSolveSourceCalculation,
+    NetworkState,
+    NetworkStateParticipant,
+)
+from app.db.models.species import ConformerObservation
+from app.db.models.transition_state import TransitionState, TransitionStateEntry
+from app.resolution.conformer import resolve_conformer_group
+from app.resolution.geometry import resolve_geometry_payload
+from app.resolution.species import resolve_species_entry
+from app.schemas.fragments.calculation import CalculationCreateRequest
+from app.schemas.geometry import GeometryPayload
+from app.schemas.workflows.network_pdep_upload import (
+    CalculationIn,
+    NetworkPDepUploadRequest,
+)
+from app.schemas.workflows.reaction_upload import (
+    ReactionParticipantUpload,
+    ReactionUploadRequest,
+)
+from app.services.calculation_resolution import (
+    persist_calculation,
+    resolve_calculation_create_request,
+    resolve_workflow_tool_release_ref,
+)
+from app.services.literature_resolution import resolve_or_create_literature
+from app.services.software_resolution import resolve_software_release_ref
+from app.workflows.reaction import persist_reaction_upload
+
+
+def _composition_hash(participants: list[tuple[int, int]]) -> str:
+    """Compute a canonical SHA-256 hash for a network state composition."""
+    canonical = sorted(participants)
+    encoded = json.dumps(canonical, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _persist_calculation(
+    session: Session,
+    calc_in: CalculationIn,
+    *,
+    species_entry_id: int | None = None,
+    transition_state_entry_id: int | None = None,
+    geometry_id: int | None = None,
+    geometry_key_map: dict[str, int],
+    created_by: int | None = None,
+) -> "app.db.models.calculation.Calculation":
+    """Resolve and persist one calculation from the upload payload.
+
+    Handles geometry_key lookup, provenance resolution, and inline results.
+    """
+    # Determine geometry_id
+    effective_geometry_id = geometry_id
+    if calc_in.geometry_key is not None:
+        effective_geometry_id = geometry_key_map[calc_in.geometry_key]
+
+    # Resolve provenance and create calculation
+    calc_request = CalculationCreateRequest(
+        type=calc_in.type,
+        species_entry_id=species_entry_id,
+        transition_state_entry_id=transition_state_entry_id,
+        software_release=calc_in.software_release,
+        workflow_tool_release=calc_in.workflow_tool_release,
+        level_of_theory=calc_in.level_of_theory,
+    )
+    calc_resolved = resolve_calculation_create_request(session, calc_request)
+    calculation = persist_calculation(session, calc_resolved, created_by=created_by)
+
+    # Link geometry as output if available
+    if effective_geometry_id is not None:
+        session.add(
+            CalculationOutputGeometry(
+                calculation_id=calculation.id,
+                geometry_id=effective_geometry_id,
+                output_order=1,
+                role=CalculationGeometryRole.final,
+            )
+        )
+
+    # Persist inline results
+    if calc_in.type.value == "sp" and calc_in.sp_electronic_energy_hartree is not None:
+        session.add(
+            CalculationSPResult(
+                calculation_id=calculation.id,
+                electronic_energy_hartree=calc_in.sp_electronic_energy_hartree,
+            )
+        )
+    if calc_in.type.value == "opt" and any(
+        v is not None
+        for v in (calc_in.opt_converged, calc_in.opt_n_steps, calc_in.opt_final_energy_hartree)
+    ):
+        session.add(
+            CalculationOptResult(
+                calculation_id=calculation.id,
+                converged=calc_in.opt_converged,
+                n_steps=calc_in.opt_n_steps,
+                final_energy_hartree=calc_in.opt_final_energy_hartree,
+            )
+        )
+    if calc_in.type.value == "freq" and any(
+        v is not None
+        for v in (calc_in.freq_n_imag, calc_in.freq_imag_freq_cm1, calc_in.freq_zpe_hartree)
+    ):
+        session.add(
+            CalculationFreqResult(
+                calculation_id=calculation.id,
+                n_imag=calc_in.freq_n_imag,
+                imag_freq_cm1=calc_in.freq_imag_freq_cm1,
+                zpe_hartree=calc_in.freq_zpe_hartree,
+            )
+        )
+
+    session.flush()
+    return calculation
+
+
+def _infer_species_role(
+    state_kind: str,
+    state_key: str,
+    *,
+    source_state_keys: set[str],
+    sink_state_keys: set[str],
+) -> NetworkSpeciesRole:
+    """Infer a flat membership role for a species based on its state context."""
+    if state_kind == "well":
+        return NetworkSpeciesRole.well
+    if state_key in source_state_keys and state_key not in sink_state_keys:
+        return NetworkSpeciesRole.reactant
+    if state_key in sink_state_keys and state_key not in source_state_keys:
+        return NetworkSpeciesRole.product
+    return NetworkSpeciesRole.reactant
+
+
+def persist_network_pdep_upload(
+    session: Session,
+    request: NetworkPDepUploadRequest,
+    *,
+    created_by: int | None = None,
+) -> Network:
+    """Persist a complete pressure-dependent network upload workflow.
+
+    Handles the full pipeline: species + conformers + calculations,
+    transition states, micro reactions, network topology, and solve.
+    """
+
+    # Maps populated during resolution
+    species_key_to_entry: dict[str, object] = {}
+    geometry_key_to_id: dict[str, int] = {}
+    calculation_key_to_id: dict[str, int] = {}
+    reaction_key_to_entry: dict[str, object] = {}
+
+    # ------------------------------------------------------------------
+    # 1. Resolve species
+    # ------------------------------------------------------------------
+    for sp in request.species:
+        species_entry = resolve_species_entry(
+            session, sp.species_entry, created_by=created_by
+        )
+        species_key_to_entry[sp.key] = species_entry
+
+    # ------------------------------------------------------------------
+    # 2. Process conformers (geometry + opt calc + conformer observation)
+    # ------------------------------------------------------------------
+    for sp in request.species:
+        species_entry = species_key_to_entry[sp.key]
+        for conf in sp.conformers:
+            # Resolve geometry
+            geom_payload = GeometryPayload(xyz_text=conf.geometry.xyz_text)
+            geometry = resolve_geometry_payload(session, geom_payload)
+            geometry_key_to_id[conf.geometry.key] = geometry.id
+
+            # Create opt calculation
+            calculation = _persist_calculation(
+                session,
+                conf.calculation,
+                species_entry_id=species_entry.id,
+                geometry_id=geometry.id,
+                geometry_key_map=geometry_key_to_id,
+                created_by=created_by,
+            )
+            calculation_key_to_id[conf.calculation.key] = calculation.id
+
+            # Create conformer group + observation
+            conformer_group = resolve_conformer_group(
+                session,
+                species_entry,
+                label=conf.label,
+                created_by=created_by,
+            )
+            session.add(
+                ConformerObservation(
+                    conformer_group_id=conformer_group.id,
+                    calculation_id=calculation.id,
+                    scientific_origin=conf.scientific_origin,
+                    note=conf.note,
+                    created_by=created_by,
+                )
+            )
+            session.flush()
+
+    # ------------------------------------------------------------------
+    # 3. Process species-level additional calculations (sp, freq, etc.)
+    # ------------------------------------------------------------------
+    for sp in request.species:
+        species_entry = species_key_to_entry[sp.key]
+        for calc_in in sp.calculations:
+            calculation = _persist_calculation(
+                session,
+                calc_in,
+                species_entry_id=species_entry.id,
+                geometry_key_map=geometry_key_to_id,
+                created_by=created_by,
+            )
+            calculation_key_to_id[calc_in.key] = calculation.id
+
+    # ------------------------------------------------------------------
+    # 4. Resolve micro reactions
+    # ------------------------------------------------------------------
+    for rxn in request.micro_reactions:
+        reaction_upload = ReactionUploadRequest(
+            reversible=rxn.reversible,
+            reaction_family=rxn.reaction_family,
+            reaction_family_source_note=rxn.reaction_family_source_note,
+            reactants=[
+                ReactionParticipantUpload(
+                    species_entry_id=species_key_to_entry[p.species_key].id,
+                    note=p.note,
+                )
+                for p in rxn.reactants
+            ],
+            products=[
+                ReactionParticipantUpload(
+                    species_entry_id=species_key_to_entry[p.species_key].id,
+                    note=p.note,
+                )
+                for p in rxn.products
+            ],
+        )
+        reaction_entry = persist_reaction_upload(
+            session, reaction_upload, created_by=created_by
+        )
+        reaction_key_to_entry[rxn.key] = reaction_entry
+
+    # ------------------------------------------------------------------
+    # 5. Process transition states
+    # ------------------------------------------------------------------
+    for ts_in in request.transition_states:
+        reaction_entry = reaction_key_to_entry[ts_in.micro_reaction_key]
+
+        # Create TransitionState (concept level)
+        ts = TransitionState(
+            reaction_entry_id=reaction_entry.id,
+            label=ts_in.label,
+            note=ts_in.note,
+            created_by=created_by,
+        )
+        session.add(ts)
+        session.flush()
+
+        # Create TransitionStateEntry (candidate geometry)
+        ts_entry = TransitionStateEntry(
+            transition_state_id=ts.id,
+            charge=ts_in.charge,
+            multiplicity=ts_in.multiplicity,
+            created_by=created_by,
+        )
+        session.add(ts_entry)
+        session.flush()
+
+        # Resolve TS geometry
+        ts_geom_payload = GeometryPayload(xyz_text=ts_in.geometry.xyz_text)
+        ts_geometry = resolve_geometry_payload(session, ts_geom_payload)
+        geometry_key_to_id[ts_in.geometry.key] = ts_geometry.id
+
+        # Create TS opt calculation
+        ts_calc = _persist_calculation(
+            session,
+            ts_in.calculation,
+            transition_state_entry_id=ts_entry.id,
+            geometry_id=ts_geometry.id,
+            geometry_key_map=geometry_key_to_id,
+            created_by=created_by,
+        )
+        calculation_key_to_id[ts_in.calculation.key] = ts_calc.id
+
+        # Additional TS calculations (freq, sp, irc)
+        for calc_in in ts_in.calculations:
+            calc = _persist_calculation(
+                session,
+                calc_in,
+                transition_state_entry_id=ts_entry.id,
+                geometry_key_map=geometry_key_to_id,
+                created_by=created_by,
+            )
+            calculation_key_to_id[calc_in.key] = calc.id
+
+    # ------------------------------------------------------------------
+    # 6. Resolve network-level provenance and create network
+    # ------------------------------------------------------------------
+    literature = (
+        resolve_or_create_literature(session, request.literature)
+        if request.literature is not None
+        else None
+    )
+    software_release = (
+        resolve_software_release_ref(session, request.software_release)
+        if request.software_release is not None
+        else None
+    )
+    workflow_tool_release = resolve_workflow_tool_release_ref(
+        session, request.workflow_tool_release
+    )
+
+    network = Network(
+        name=request.name,
+        description=request.description,
+        literature_id=literature.id if literature else None,
+        software_release_id=software_release.id if software_release else None,
+        workflow_tool_release_id=(
+            workflow_tool_release.id if workflow_tool_release else None
+        ),
+        created_by=created_by,
+    )
+    session.add(network)
+    session.flush()
+
+    # ------------------------------------------------------------------
+    # 7. Create network states + participants
+    # ------------------------------------------------------------------
+    state_key_to_row: dict[str, NetworkState] = {}
+    for state_in in request.states:
+        participants = [
+            (species_key_to_entry[p.species_key].id, p.stoichiometry)
+            for p in state_in.participants
+        ]
+        comp_hash = _composition_hash(participants)
+
+        state = NetworkState(
+            network_id=network.id,
+            kind=state_in.kind,
+            composition_hash=comp_hash,
+            label=state_in.label,
+        )
+        session.add(state)
+        session.flush()
+
+        for p in state_in.participants:
+            session.add(
+                NetworkStateParticipant(
+                    state_id=state.id,
+                    species_entry_id=species_key_to_entry[p.species_key].id,
+                    stoichiometry=p.stoichiometry,
+                )
+            )
+
+        state_key_to_row[state_in.key] = state
+
+    session.flush()
+
+    # ------------------------------------------------------------------
+    # 8. Create channels
+    # ------------------------------------------------------------------
+    for ch_in in request.channels:
+        session.add(
+            NetworkChannel(
+                network_id=network.id,
+                source_state_id=state_key_to_row[ch_in.source_state_key].id,
+                sink_state_id=state_key_to_row[ch_in.sink_state_key].id,
+                kind=ch_in.kind,
+            )
+        )
+    session.flush()
+
+    # ------------------------------------------------------------------
+    # 9. Create flat membership (network_species + network_reaction)
+    # ------------------------------------------------------------------
+    source_state_keys = {ch.source_state_key for ch in request.channels}
+    sink_state_keys = {ch.sink_state_key for ch in request.channels}
+
+    seen_species_roles: set[tuple[int, NetworkSpeciesRole]] = set()
+    for state_in in request.states:
+        role = _infer_species_role(
+            state_in.kind,
+            state_in.key,
+            source_state_keys=source_state_keys,
+            sink_state_keys=sink_state_keys,
+        )
+        for p in state_in.participants:
+            se_id = species_key_to_entry[p.species_key].id
+            pair = (se_id, role)
+            if pair not in seen_species_roles:
+                seen_species_roles.add(pair)
+                session.add(
+                    NetworkSpecies(
+                        network_id=network.id,
+                        species_entry_id=se_id,
+                        role=role,
+                    )
+                )
+
+    # Bath gas species
+    if request.solve:
+        for bg in request.solve.bath_gas:
+            se_id = species_key_to_entry[bg.species_key].id
+            pair = (se_id, NetworkSpeciesRole.bath_gas)
+            if pair not in seen_species_roles:
+                seen_species_roles.add(pair)
+                session.add(
+                    NetworkSpecies(
+                        network_id=network.id,
+                        species_entry_id=se_id,
+                        role=NetworkSpeciesRole.bath_gas,
+                    )
+                )
+
+    # Reaction links
+    for rxn_key, rxn_entry in reaction_key_to_entry.items():
+        session.add(
+            NetworkReaction(
+                network_id=network.id,
+                reaction_entry_id=rxn_entry.id,
+            )
+        )
+    session.flush()
+
+    # ------------------------------------------------------------------
+    # 10. Create solve if provided
+    # ------------------------------------------------------------------
+    if request.solve:
+        solve_in = request.solve
+
+        solve_literature = (
+            resolve_or_create_literature(session, solve_in.literature)
+            if solve_in.literature is not None
+            else None
+        )
+        solve_software = (
+            resolve_software_release_ref(session, solve_in.software_release)
+            if solve_in.software_release is not None
+            else None
+        )
+        solve_workflow = resolve_workflow_tool_release_ref(
+            session, solve_in.workflow_tool_release
+        )
+
+        solve = NetworkSolve(
+            network_id=network.id,
+            me_method=solve_in.me_method,
+            interpolation_model=solve_in.interpolation_model,
+            tmin_k=solve_in.tmin_k,
+            tmax_k=solve_in.tmax_k,
+            pmin_bar=solve_in.pmin_bar,
+            pmax_bar=solve_in.pmax_bar,
+            grain_size_cm_inv=solve_in.grain_size_cm_inv,
+            grain_count=solve_in.grain_count,
+            emax_kj_mol=solve_in.emax_kj_mol,
+            literature_id=solve_literature.id if solve_literature else None,
+            software_release_id=solve_software.id if solve_software else None,
+            workflow_tool_release_id=(
+                solve_workflow.id if solve_workflow else None
+            ),
+            note=solve_in.note,
+            created_by=created_by,
+        )
+        session.add(solve)
+        session.flush()
+
+        # Bath gas
+        for bg in solve_in.bath_gas:
+            session.add(
+                NetworkSolveBathGas(
+                    solve_id=solve.id,
+                    species_entry_id=species_key_to_entry[bg.species_key].id,
+                    mole_fraction=bg.mole_fraction,
+                )
+            )
+
+        # Energy transfer
+        if solve_in.energy_transfer:
+            et = solve_in.energy_transfer
+            session.add(
+                NetworkSolveEnergyTransfer(
+                    solve_id=solve.id,
+                    model=et.model,
+                    alpha0_cm_inv=et.alpha0_cm_inv,
+                    t_exponent=et.t_exponent,
+                    t_ref_k=et.t_ref_k,
+                    note=et.note,
+                )
+            )
+
+        # Source calculations
+        for sc in solve_in.source_calculations:
+            session.add(
+                NetworkSolveSourceCalculation(
+                    solve_id=solve.id,
+                    calculation_id=calculation_key_to_id[sc.calculation_key],
+                    role=sc.role,
+                )
+            )
+
+        session.flush()
+
+    return network

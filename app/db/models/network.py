@@ -11,6 +11,7 @@ from app.db.models.common import NetworkSpeciesRole
 
 if TYPE_CHECKING:
     from app.db.models.literature import Literature
+    from app.db.models.network_pdep import NetworkChannel, NetworkSolve, NetworkState
     from app.db.models.reaction import ReactionEntry
     from app.db.models.software import SoftwareRelease
     from app.db.models.species import SpeciesEntry
@@ -56,6 +57,19 @@ class Network(Base, TimestampMixin, CreatedByMixin):
         cascade="all, delete-orphan",
     )
     species_links: Mapped[list["NetworkSpecies"]] = relationship(
+        back_populates="network",
+        cascade="all, delete-orphan",
+    )
+
+    states: Mapped[list["NetworkState"]] = relationship(
+        back_populates="network",
+        cascade="all, delete-orphan",
+    )
+    channels: Mapped[list["NetworkChannel"]] = relationship(
+        back_populates="network",
+        cascade="all, delete-orphan",
+    )
+    solves: Mapped[list["NetworkSolve"]] = relationship(
         back_populates="network",
         cascade="all, delete-orphan",
     )

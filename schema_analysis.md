@@ -178,6 +178,28 @@ Migration details that materially affect semantics:
 - `id`
 - `stoichiometry_hash`
 - `reversible`
+- `reaction_family_id`
+- `reaction_family_raw`
+- `reaction_family_source_note`
+
+### Result
+
+- None
+
+### Provenance
+
+- `created_at`
+
+### Curation
+
+- None
+
+## reaction_family
+
+### Identity
+
+- `id`
+- `name`
 
 ### Result
 

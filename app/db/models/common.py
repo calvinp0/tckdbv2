@@ -204,3 +204,32 @@ class SpeciesEntryStereoKind(str, Enum):
 class SpeciesEntryStateKind(str, Enum):
     ground = "ground"
     excited = "excited"
+
+
+class NetworkStateKind(str, Enum):
+    well = "well"
+    bimolecular = "bimolecular"
+    termolecular = "termolecular"
+
+
+class NetworkChannelKind(str, Enum):
+    isomerization = "isomerization"
+    association = "association"
+    dissociation = "dissociation"
+    stabilization = "stabilization"
+    exchange = "exchange"
+
+
+class NetworkKineticsModelKind(str, Enum):
+    chebyshev = "chebyshev"
+    plog = "plog"
+    tabulated = "tabulated"
+
+
+class NetworkSolveCalculationRole(str, Enum):
+    well_energy = "well_energy"
+    barrier_energy = "barrier_energy"
+    well_freq = "well_freq"
+    barrier_freq = "barrier_freq"
+    master_equation_run = "master_equation_run"
+    fit_source = "fit_source"

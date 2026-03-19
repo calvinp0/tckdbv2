@@ -11,8 +11,10 @@ from __future__ import annotations
 import importlib
 from typing import Sequence, Union
 
+import sqlalchemy as sa
 from alembic import op
 from app.db.base import Base
+from app.schemas.reaction_family import CANONICAL_REACTION_FAMILIES
 
 # revision identifiers, used by Alembic.
 revision: str = "d861dfd60891"
@@ -30,6 +32,7 @@ _MODEL_MODULES = (
     "app.db.models.literature",
     "app.db.models.literature_author",
     "app.db.models.network",
+    "app.db.models.network_pdep",
     "app.db.models.reaction",
     "app.db.models.software",
     "app.db.models.species",
@@ -46,11 +49,23 @@ def _load_models() -> None:
         importlib.import_module(module_name)
 
 
+def _seed_reaction_families(bind) -> None:
+    reaction_family_table = sa.table(
+        "reaction_family",
+        sa.column("name", sa.Text()),
+    )
+    bind.execute(
+        sa.insert(reaction_family_table),
+        [{"name": family_name} for family_name in sorted(CANONICAL_REACTION_FAMILIES)],
+    )
+
+
 def upgrade() -> None:
     """Upgrade schema."""
     _load_models()
     bind = op.get_bind()
     Base.metadata.create_all(bind=bind)
+    _seed_reaction_families(bind)
 
 
 def downgrade() -> None:

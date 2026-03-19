@@ -67,13 +67,22 @@ Notes:
 - `species_entry_identity_uq` is a unique identity constraint
 - nullable identity components are deduped with PostgreSQL `NULLS NOT DISTINCT`
 
-### 2.3 Chem Reaction and Reaction Entry
+### 2.3 Chem Reaction, Reaction Family, and Reaction Entry
+
+`reaction_family` fields:
+
+- `id`
+- `name`
+- `created_at`
 
 `chem_reaction` fields:
 
 - `id`
 - `stoichiometry_hash`
 - `reversible`
+- `reaction_family_id`
+- `reaction_family_raw`
+- `reaction_family_source_note`
 - `created_at`
 
 `reaction_entry` fields:
@@ -85,7 +94,14 @@ Notes:
 
 Notes:
 
+- `reaction_family.name` stores the canonical family name
+- `reaction_family.name` is unique
 - `stoichiometry_hash` is unique
+- `chem_reaction.reaction_family_id` is nullable, so reactions may omit a family assignment
+- `chem_reaction.reaction_family_raw` stores a submitted family label when it is not in the canonical lookup
+- `chem_reaction.reaction_family_source_note` stores provenance for a non-canonical submitted family label
+- if `chem_reaction.reaction_family_raw` is set, `chem_reaction.reaction_family_source_note` is required
+- upload-facing payloads still accept a family name and the backend resolves it to the lookup row when canonical
 - `reaction_entry` no longer carries preferred TS or preferred kinetics pointers
 - `reaction_participant` is a compressed stoichiometric summary, not an ordered participant-slot table
 - `reaction_participant.stoichiometry` must be at least 1

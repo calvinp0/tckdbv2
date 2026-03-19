@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.db.models.common import ReactionRole
 from app.schemas.common import (
@@ -7,6 +7,41 @@ from app.schemas.common import (
     TimestampedCreatedByReadSchema,
     TimestampedReadSchema,
 )
+from app.schemas.reaction_family import normalize_reaction_family
+
+# -----------------------------
+# ReactionFamily (reaction_family)
+# -----------------------------
+
+
+class ReactionFamilyBase(BaseModel):
+    name: str = Field(min_length=1)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        normalized = normalize_reaction_family(value)
+        if normalized is None:
+            raise ValueError("reaction_family name must not be blank.")
+        return normalized
+
+
+class ReactionFamilyCreate(ReactionFamilyBase, SchemaBase):
+    pass
+
+
+class ReactionFamilyUpdate(SchemaBase):
+    name: str | None = Field(default=None, min_length=1)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str | None) -> str | None:
+        return normalize_reaction_family(value)
+
+
+class ReactionFamilyRead(ReactionFamilyBase, TimestampedReadSchema):
+    pass
+
 
 # -----------------------------
 # ChemReaction (chem_reaction)
@@ -16,6 +51,9 @@ from app.schemas.common import (
 class ChemReactionBase(BaseModel):
     reversible: bool
     stoichiometry_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    reaction_family_id: int | None = None
+    reaction_family_raw: str | None = None
+    reaction_family_source_note: str | None = None
 
 
 class ChemReactionCreate(ChemReactionBase, SchemaBase):
@@ -25,6 +63,7 @@ class ChemReactionCreate(ChemReactionBase, SchemaBase):
 class ChemReactionUpdate(SchemaBase):
     reversible: bool | None = None
     stoichiometry_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    reaction_family_id: int | None = None
 
 
 class ChemReactionRead(ChemReactionBase, TimestampedReadSchema):

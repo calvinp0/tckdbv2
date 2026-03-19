@@ -28,6 +28,8 @@ def persist_kinetics_upload(
         session,
         ReactionUploadRequest(
             reversible=request.reaction.reversible,
+            reaction_family=request.reaction.reaction_family,
+            reaction_family_source_note=request.reaction.reaction_family_source_note,
             reactants=[
                 {
                     "species_entry": participant.species_entry,

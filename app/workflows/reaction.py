@@ -66,6 +66,8 @@ def persist_reaction_upload(
     chem_reaction = resolve_chem_reaction(
         session,
         reversible=request.reversible,
+        reaction_family=request.reaction_family,
+        reaction_family_source_note=request.reaction_family_source_note,
         reactant_stoichiometry=compress_species_stoichiometry(reactant_entries),
         product_stoichiometry=compress_species_stoichiometry(product_entries),
     )

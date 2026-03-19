@@ -94,11 +94,40 @@ enum molecule_kind {
   pseudo
 }
 
+enum network_channel_kind {
+  isomerization
+  association
+  dissociation
+  stabilization
+  exchange
+}
+
+enum network_kinetics_model_kind {
+  chebyshev
+  plog
+  tabulated
+}
+
+enum network_solve_calc_role {
+  well_energy
+  barrier_energy
+  well_freq
+  barrier_freq
+  master_equation_run
+  fit_source
+}
+
 enum network_species_role {
   well
   reactant
   product
   bath_gas
+}
+
+enum network_state_kind {
+  well
+  bimolecular
+  termolecular
 }
 
 enum reaction_role {
@@ -233,13 +262,6 @@ Table author {
   }
 }
 
-Table chem_reaction {
-  id bigint [pk, not null]
-  stoichiometry_hash varchar(64) [unique]
-  reversible bool [not null]
-  created_at timestamp [not null, default: 'now']
-}
-
 Table geometry {
   id bigint [pk, not null]
   natoms int [not null]
@@ -290,6 +312,12 @@ Table literature {
   created_at timestamp [not null, default: 'now']
 }
 
+Table reaction_family {
+  id bigint [pk, not null]
+  name text [not null, unique]
+  created_at timestamp [not null, default: 'now']
+}
+
 Table software {
   id bigint [pk, not null]
   name text [not null]
@@ -335,6 +363,20 @@ Table workflow_tool {
   }
 
   Note: 'Stable identity for a workflow or orchestration tool.'
+}
+
+Table chem_reaction {
+  id bigint [pk, not null]
+  stoichiometry_hash varchar(64) [unique]
+  reversible bool [not null]
+  reaction_family_id bigint [ref: > reaction_family.id]
+  reaction_family_raw text
+  reaction_family_source_note text
+  created_at timestamp [not null, default: 'now']
+
+  checks {
+    `reaction_family_raw IS NULL OR reaction_family_source_note IS NOT NULL` [name: 'ck_chem_reaction_reaction_family_raw_requires_source_note']
+  }
 }
 
 Table conformer_assignment_scheme {
@@ -384,30 +426,6 @@ Table literature_author {
     (literature_id, author_id) [pk]
     (literature_id, author_order) [unique, name: 'uq_literature_author_literature_id']
   }
-}
-
-Table reaction_entry {
-  id bigint [pk, not null]
-  reaction_id bigint [not null, ref: > chem_reaction.id]
-  created_at timestamp [not null, default: 'now']
-  created_by bigint [ref: > app_user.id]
-}
-
-Table reaction_participant {
-  reaction_id bigint [not null, ref: > chem_reaction.id]
-  species_id bigint [not null, ref: > species.id]
-  role reaction_role [not null]
-  stoichiometry smallint [not null]
-
-  indexes {
-    (reaction_id, species_id, role) [pk]
-  }
-
-  checks {
-    `stoichiometry >= 1` [name: 'ck_reaction_participant_stoichiometry_ge_1']
-  }
-
-  Note: 'Compressed stoichiometric summary for a reaction graph identity. This is not an ordered participant-slot table. Repeated species on one side of a reaction are represented with `stoichiometry`.'
 }
 
 Table software_release {
@@ -483,35 +501,6 @@ Table conformer_group {
   Note: 'Store one deduplicated conformational basin for a species entry.'
 }
 
-Table kinetics {
-  id bigint [pk, not null]
-  reaction_entry_id bigint [not null, ref: > reaction_entry.id]
-  scientific_origin scientific_origin_kind [not null]
-  model_kind kinetics_model_kind [not null, default: 'modified_arrhenius']
-  literature_id bigint [ref: > literature.id]
-  workflow_tool_release_id bigint [ref: > workflow_tool_release.id]
-  software_release_id bigint [ref: > software_release.id]
-  a double
-  a_units text
-  n double
-  ea_kj_mol double
-  tmin_k double
-  tmax_k double
-  degeneracy double
-  tunneling_model text
-  note text
-  created_at timestamp [not null, default: 'now']
-  created_by bigint [ref: > app_user.id]
-
-  checks {
-    `tmax_k IS NULL OR tmax_k > 0` [name: 'ck_kinetics_tmax_k_gt_0']
-    `tmin_k IS NULL OR tmin_k > 0` [name: 'ck_kinetics_tmin_k_gt_0']
-    `tmin_k IS NULL OR tmax_k IS NULL OR tmin_k <= tmax_k` [name: 'ck_kinetics_tmin_le_tmax']
-  }
-
-  Note: 'Kinetics records attached to a reaction entry.'
-}
-
 Table network {
   id bigint [pk, not null]
   name text
@@ -525,23 +514,28 @@ Table network {
   Note: 'Reaction network metadata.'
 }
 
-Table reaction_entry_structure_participant {
+Table reaction_entry {
   id bigint [pk, not null]
-  reaction_entry_id bigint [not null, ref: > reaction_entry.id]
-  species_entry_id bigint [not null, ref: > species_entry.id]
-  role reaction_role [not null]
-  participant_index int [not null]
-  note text
+  reaction_id bigint [not null, ref: > chem_reaction.id]
   created_at timestamp [not null, default: 'now']
   created_by bigint [ref: > app_user.id]
+}
+
+Table reaction_participant {
+  reaction_id bigint [not null, ref: > chem_reaction.id]
+  species_id bigint [not null, ref: > species.id]
+  role reaction_role [not null]
+  stoichiometry smallint [not null]
 
   indexes {
-    (reaction_entry_id, role, participant_index) [unique, name: 'uq_reaction_entry_structure_participant_reaction_entry_id']
+    (reaction_id, species_id, role) [pk]
   }
 
   checks {
-    `participant_index >= 1` [name: 'ck_reaction_entry_structure_participant_participant_index_ge_1']
+    `stoichiometry >= 1` [name: 'ck_reaction_participant_stoichiometry_ge_1']
   }
+
+  Note: 'Compressed stoichiometric summary for a reaction graph identity. This is not an ordered participant-slot table. Repeated species on one side of a reaction are represented with `stoichiometry`.'
 }
 
 Table species_entry_review {
@@ -608,17 +602,6 @@ Table thermo {
   Note: 'Thermochemistry records for a species entry. Dedupe uses the provenance tuple with PostgreSQL `NULLS NOT DISTINCT`.'
 }
 
-Table transition_state {
-  id bigint [pk, not null]
-  reaction_entry_id bigint [not null, ref: > reaction_entry.id]
-  label text
-  note text
-  created_at timestamp [not null, default: 'now']
-  created_by bigint [ref: > app_user.id]
-
-  Note: 'Reaction-channel-level transition-state concept. This groups candidate saddle-point structures that belong to the same reaction-channel interpretation.'
-}
-
 Table transport {
   id bigint [pk, not null]
   species_entry_id bigint [not null, ref: > species_entry.id]
@@ -660,6 +643,35 @@ Table conformer_selection {
   Note: 'Store explicit workflow, curation, or UI selections for conformer groups. `NULL` assignment-scheme references are treated as identical for dedupe.'
 }
 
+Table kinetics {
+  id bigint [pk, not null]
+  reaction_entry_id bigint [not null, ref: > reaction_entry.id]
+  scientific_origin scientific_origin_kind [not null]
+  model_kind kinetics_model_kind [not null, default: 'modified_arrhenius']
+  literature_id bigint [ref: > literature.id]
+  workflow_tool_release_id bigint [ref: > workflow_tool_release.id]
+  software_release_id bigint [ref: > software_release.id]
+  a double
+  a_units text
+  n double
+  ea_kj_mol double
+  tmin_k double
+  tmax_k double
+  degeneracy double
+  tunneling_model text
+  note text
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  checks {
+    `tmax_k IS NULL OR tmax_k > 0` [name: 'ck_kinetics_tmax_k_gt_0']
+    `tmin_k IS NULL OR tmin_k > 0` [name: 'ck_kinetics_tmin_k_gt_0']
+    `tmin_k IS NULL OR tmax_k IS NULL OR tmin_k <= tmax_k` [name: 'ck_kinetics_tmin_le_tmax']
+  }
+
+  Note: 'Kinetics records attached to a reaction entry.'
+}
+
 Table network_reaction {
   network_id bigint [not null, ref: > network.id]
   reaction_entry_id bigint [not null, ref: > reaction_entry.id]
@@ -669,6 +681,38 @@ Table network_reaction {
   }
 
   Note: 'Links a network to a reaction entry.'
+}
+
+Table network_solve {
+  id bigint [pk, not null]
+  network_id bigint [not null, ref: > network.id]
+  literature_id bigint [ref: > literature.id]
+  software_release_id bigint [ref: > software_release.id]
+  workflow_tool_release_id bigint [ref: > workflow_tool_release.id]
+  me_method text
+  interpolation_model text
+  grain_size_cm_inv double
+  grain_count int
+  emax_kj_mol double
+  tmin_k double
+  tmax_k double
+  pmin_bar double
+  pmax_bar double
+  note text
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  checks {
+    `grain_count IS NULL OR grain_count >= 1` [name: 'ck_network_solve_grain_count_ge_1']
+    `pmax_bar IS NULL OR pmax_bar > 0` [name: 'ck_network_solve_pmax_bar_gt_0']
+    `pmin_bar IS NULL OR pmin_bar > 0` [name: 'ck_network_solve_pmin_bar_gt_0']
+    `pmin_bar IS NULL OR pmax_bar IS NULL OR pmin_bar <= pmax_bar` [name: 'ck_network_solve_pmin_le_pmax']
+    `tmax_k IS NULL OR tmax_k > 0` [name: 'ck_network_solve_tmax_k_gt_0']
+    `tmin_k IS NULL OR tmin_k > 0` [name: 'ck_network_solve_tmin_k_gt_0']
+    `tmin_k IS NULL OR tmax_k IS NULL OR tmin_k <= tmax_k` [name: 'ck_network_solve_tmin_le_tmax']
+  }
+
+  Note: 'One master-equation solution for a reaction network.'
 }
 
 Table network_species {
@@ -681,6 +725,39 @@ Table network_species {
   }
 
   Note: 'Links a network to a species entry with a role.'
+}
+
+Table network_state {
+  id bigint [pk, not null]
+  network_id bigint [not null, ref: > network.id]
+  kind network_state_kind [not null]
+  composition_hash varchar(64) [not null]
+  label text
+
+  indexes {
+    (network_id, composition_hash) [unique, name: 'uq_network_state_network_id']
+  }
+
+  Note: 'A macroscopic state in a reaction network (well or bimolecular channel).'
+}
+
+Table reaction_entry_structure_participant {
+  id bigint [pk, not null]
+  reaction_entry_id bigint [not null, ref: > reaction_entry.id]
+  species_entry_id bigint [not null, ref: > species_entry.id]
+  role reaction_role [not null]
+  participant_index int [not null]
+  note text
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  indexes {
+    (reaction_entry_id, role, participant_index) [unique, name: 'uq_reaction_entry_structure_participant_reaction_entry_id']
+  }
+
+  checks {
+    `participant_index >= 1` [name: 'ck_reaction_entry_structure_participant_participant_index_ge_1']
+  }
 }
 
 Table thermo_nasa {
@@ -737,6 +814,79 @@ Table thermo_point {
   Note: 'Tabulated thermo values at a specific temperature.'
 }
 
+Table transition_state {
+  id bigint [pk, not null]
+  reaction_entry_id bigint [not null, ref: > reaction_entry.id]
+  label text
+  note text
+  created_at timestamp [not null, default: 'now']
+  created_by bigint [ref: > app_user.id]
+
+  Note: 'Reaction-channel-level transition-state concept. This groups candidate saddle-point structures that belong to the same reaction-channel interpretation.'
+}
+
+Table network_channel {
+  id bigint [pk, not null]
+  network_id bigint [not null, ref: > network.id]
+  source_state_id bigint [not null, ref: > network_state.id]
+  sink_state_id bigint [not null, ref: > network_state.id]
+  kind network_channel_kind [not null]
+
+  indexes {
+    (network_id, source_state_id, sink_state_id) [unique, name: 'uq_network_channel_network_id']
+  }
+
+  checks {
+    `source_state_id <> sink_state_id` [name: 'ck_network_channel_source_ne_sink']
+  }
+
+  Note: 'A directed phenomenological channel between two network states.'
+}
+
+Table network_solve_bath_gas {
+  solve_id bigint [not null, ref: > network_solve.id]
+  species_entry_id bigint [not null, ref: > species_entry.id]
+  mole_fraction double [not null]
+
+  indexes {
+    (solve_id, species_entry_id) [pk]
+  }
+
+  checks {
+    `mole_fraction > 0 AND mole_fraction <= 1` [name: 'ck_network_solve_bath_gas_mole_fraction_range']
+  }
+
+  Note: 'Bath gas composition for one network solve.'
+}
+
+Table network_solve_energy_transfer {
+  id bigint [pk, not null]
+  solve_id bigint [not null, ref: > network_solve.id]
+  model text
+  alpha0_cm_inv double
+  t_exponent double
+  t_ref_k double
+  note text
+
+  Note: 'Energy transfer model parameters for one network solve.'
+}
+
+Table network_state_participant {
+  state_id bigint [not null, ref: > network_state.id]
+  species_entry_id bigint [not null, ref: > species_entry.id]
+  stoichiometry smallint [not null, default: 1]
+
+  indexes {
+    (state_id, species_entry_id) [pk]
+  }
+
+  checks {
+    `stoichiometry >= 1` [name: 'ck_network_state_participant_stoichiometry_ge_1']
+  }
+
+  Note: 'Species composition of a network state.'
+}
+
 Table transition_state_entry {
   id bigint [pk, not null]
   transition_state_id bigint [not null, ref: > transition_state.id]
@@ -785,6 +935,34 @@ Table calculation {
   }
 
   Note: 'Computational record owned by exactly one species or transition-state entry.'
+}
+
+Table network_kinetics {
+  id bigint [pk, not null]
+  channel_id bigint [not null, ref: > network_channel.id]
+  solve_id bigint [not null, ref: > network_solve.id]
+  model_kind network_kinetics_model_kind [not null]
+  tmin_k double
+  tmax_k double
+  pmin_bar double
+  pmax_bar double
+  rate_units text
+  pressure_units text
+  temperature_units text
+  stores_log10_k bool
+  note text
+  created_at timestamp [not null, default: 'now']
+
+  checks {
+    `pmax_bar IS NULL OR pmax_bar > 0` [name: 'ck_network_kinetics_pmax_bar_gt_0']
+    `pmin_bar IS NULL OR pmin_bar > 0` [name: 'ck_network_kinetics_pmin_bar_gt_0']
+    `pmin_bar IS NULL OR pmax_bar IS NULL OR pmin_bar <= pmax_bar` [name: 'ck_network_kinetics_pmin_le_pmax']
+    `tmax_k IS NULL OR tmax_k > 0` [name: 'ck_network_kinetics_tmax_k_gt_0']
+    `tmin_k IS NULL OR tmin_k > 0` [name: 'ck_network_kinetics_tmin_k_gt_0']
+    `tmin_k IS NULL OR tmax_k IS NULL OR tmin_k <= tmax_k` [name: 'ck_network_kinetics_tmin_le_tmax']
+  }
+
+  Note: 'One fitted phenomenological k(T,P) for a channel from a specific solve.'
 }
 
 Table transition_state_selection {
@@ -1003,6 +1181,70 @@ Table kinetics_source_calculation {
   }
 
   Note: 'Links kinetics records to supporting calculations by role.'
+}
+
+Table network_kinetics_chebyshev {
+  network_kinetics_id bigint [pk, not null, ref: > network_kinetics.id]
+  n_temperature smallint [not null]
+  n_pressure smallint [not null]
+  coefficients jsonb [not null]
+
+  checks {
+    `n_pressure >= 1` [name: 'ck_network_kinetics_chebyshev_n_pressure_ge_1']
+    `n_temperature >= 1` [name: 'ck_network_kinetics_chebyshev_n_temperature_ge_1']
+  }
+
+  Note: 'Chebyshev polynomial coefficients for a network kinetics record.'
+}
+
+Table network_kinetics_plog {
+  network_kinetics_id bigint [not null, ref: > network_kinetics.id]
+  pressure_bar double [not null]
+  entry_index smallint [not null, default: 1]
+  a double [not null]
+  n double [not null]
+  ea_kj_mol double [not null]
+
+  indexes {
+    (network_kinetics_id, pressure_bar, entry_index) [pk]
+  }
+
+  checks {
+    `entry_index >= 1` [name: 'ck_network_kinetics_plog_entry_index_ge_1']
+    `pressure_bar > 0` [name: 'ck_network_kinetics_plog_pressure_bar_gt_0']
+  }
+
+  Note: 'One PLOG entry: Arrhenius parameters at a discrete pressure.'
+}
+
+Table network_kinetics_point {
+  network_kinetics_id bigint [not null, ref: > network_kinetics.id]
+  temperature_k double [not null]
+  pressure_bar double [not null]
+  rate_value double [not null]
+
+  indexes {
+    (network_kinetics_id, temperature_k, pressure_bar) [pk]
+  }
+
+  checks {
+    `pressure_bar > 0` [name: 'ck_network_kinetics_point_pressure_bar_gt_0']
+    `temperature_k > 0` [name: 'ck_network_kinetics_point_temperature_k_gt_0']
+  }
+
+  Note: 'One tabulated k(T,P) data point.'
+}
+
+Table network_solve_source_calculation {
+  solve_id bigint [not null, ref: > network_solve.id]
+  calculation_id bigint [not null, ref: > calculation.id]
+  role network_solve_calc_role [not null]
+
+  indexes {
+    (solve_id, calculation_id, role) [pk]
+  }
+
+  Note: 'Links a network solve to supporting calculations by role.'
 }
 
 Table statmech_source_calculation {

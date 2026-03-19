@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from app.db.models.calculation import Calculation
     from app.db.models.kinetics import Kinetics
     from app.db.models.network import Network
+    from app.db.models.network_pdep import NetworkSolve
     from app.db.models.statmech import Statmech
     from app.db.models.thermo import Thermo
     from app.db.models.transport import Transport
@@ -78,6 +79,9 @@ class SoftwareRelease(Base, TimestampMixin):
         back_populates="software_release"
     )
     networks: Mapped[list["Network"]] = relationship(back_populates="software_release")
+    network_solves: Mapped[list["NetworkSolve"]] = relationship(
+        back_populates="software_release"
+    )
 
     __table_args__ = (
         Index(
