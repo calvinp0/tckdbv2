@@ -2,14 +2,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import BigInteger, CheckConstraint, Double, ForeignKey, Text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    Double,
+    ForeignKey,
+    PrimaryKeyConstraint,
+    Text,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, CreatedByMixin, TimestampMixin
-from app.db.models.common import ScientificOriginKind
+from app.db.models.common import ScientificOriginKind, TransportCalculationRole
 
 if TYPE_CHECKING:
+    from app.db.models.calculation import Calculation
     from app.db.models.literature import Literature
     from app.db.models.software import SoftwareRelease
     from app.db.models.species import SpeciesEntry
@@ -72,6 +80,10 @@ class Transport(Base, TimestampMixin, CreatedByMixin):
     workflow_tool_release: Mapped[Optional["WorkflowToolRelease"]] = relationship(
         back_populates="transport_records"
     )
+    source_calculations: Mapped[list["TransportSourceCalculation"]] = relationship(
+        back_populates="transport",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -86,4 +98,37 @@ class Transport(Base, TimestampMixin, CreatedByMixin):
             "rotational_relaxation IS NULL OR rotational_relaxation >= 0",
             name="rotational_relaxation_ge_0",
         ),
+        CheckConstraint(
+            "(sigma_angstrom IS NULL AND epsilon_over_k_k IS NULL) "
+            "OR (sigma_angstrom IS NOT NULL AND epsilon_over_k_k IS NOT NULL)",
+            name="lj_pair_both_or_neither",
+        ),
+    )
+
+
+class TransportSourceCalculation(Base):
+    """Links transport records to supporting calculations by role."""
+
+    __tablename__ = "transport_source_calculation"
+
+    transport_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("transport.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=False,
+    )
+    calculation_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("calculation.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=False,
+    )
+    role: Mapped[TransportCalculationRole] = mapped_column(
+        SAEnum(TransportCalculationRole, name="transport_calc_role"),
+        nullable=False,
+    )
+
+    transport: Mapped["Transport"] = relationship(back_populates="source_calculations")
+    calculation: Mapped["Calculation"] = relationship()
+
+    __table_args__ = (
+        PrimaryKeyConstraint("transport_id", "calculation_id", "role"),
     )

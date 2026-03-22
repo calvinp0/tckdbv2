@@ -42,6 +42,7 @@ from app.schemas.refs import (
 )
 from app.schemas.utils import normalize_optional_text
 from app.schemas.workflows.literature_submission import LiteratureSubmissionRequest
+from app.schemas.workflows.transport_upload import TransportUploadPayload
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +167,7 @@ class NetworkSpeciesIn(SchemaBase):
     label: str | None = None
     conformers: list[ConformerIn] = Field(default_factory=list)
     calculations: list[CalculationIn] = Field(default_factory=list)
+    transport: TransportUploadPayload | None = None
 
     @model_validator(mode="after")
     def normalize_text(self) -> Self:

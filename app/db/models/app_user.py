@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import CHAR, BigInteger, Text, UniqueConstraint
+from sqlalchemy import CHAR, BigInteger, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -22,6 +22,7 @@ class AppUser(Base, TimestampMixin):
     full_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     affiliation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     orcid: Mapped[Optional[str]] = mapped_column(CHAR(19), nullable=True)
+    api_key_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     role: Mapped[AppUserRole] = mapped_column(
         SAEnum(AppUserRole, name="app_user_role"),

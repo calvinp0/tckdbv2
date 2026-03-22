@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models.calculation import Calculation, CalculationOutputGeometry
+from app.db.models.calculation import (
+    Calculation,
+    CalculationDependency,
+    CalculationFreqResult,
+    CalculationOutputGeometry,
+    CalculationSPResult,
+)
+from app.db.models.common import CalculationDependencyRole, CalculationType
 from app.db.models.geometry import Geometry
 from app.db.models.species import (
     ConformerGroup,
@@ -180,3 +188,128 @@ def test_persist_conformer_upload_creates_linked_statmech_record(db_engine) -> N
             assert statmech.source_calculations[0].role.value == "freq"
             assert len(statmech.torsions) == 1
             assert len(statmech.torsions[0].coordinates) == 1
+
+
+def test_conformer_upload_with_additional_calculations(db_engine) -> None:
+    """Upload with primary opt + freq and sp additional calculations."""
+    request = ConformerUploadRequest(
+        species_entry={
+            "smiles": "[H][H]",
+            "charge": 0,
+            "multiplicity": 1,
+        },
+        geometry={
+            "xyz_text": "2\nH2\nH 0.0 0.0 0.0\nH 0.0 0.0 0.74",
+        },
+        calculation={
+            "type": "opt",
+            "software_release": {"name": "Gaussian", "version": "16"},
+            "level_of_theory": {"method": "B3LYP", "basis": "6-31G(d)"},
+            "opt_result": {
+                "converged": True,
+                "final_energy_hartree": -1.172,
+            },
+        },
+        additional_calculations=[
+            {
+                "type": "freq",
+                "software_release": {"name": "Gaussian", "version": "16"},
+                "level_of_theory": {"method": "B3LYP", "basis": "6-31G(d)"},
+                "freq_result": {
+                    "n_imag": 0,
+                    "zpe_hartree": 0.010,
+                },
+            },
+            {
+                "type": "sp",
+                "software_release": {"name": "Orca", "version": "5.0"},
+                "level_of_theory": {"method": "CCSD(T)", "basis": "cc-pVTZ"},
+                "sp_result": {
+                    "electronic_energy_hartree": -1.195,
+                },
+            },
+        ],
+        label="h2-full",
+    )
+
+    with Session(db_engine) as session, session.begin():
+        observation = persist_conformer_upload(session, request)
+
+        species_entry_id = session.scalar(
+            select(Calculation.species_entry_id).where(
+                Calculation.id == observation.calculation_id
+            )
+        )
+
+        # 3 calculations total attached to the species entry
+        calcs = session.scalars(
+            select(Calculation).where(
+                Calculation.species_entry_id == species_entry_id
+            )
+        ).all()
+        assert len(calcs) == 3
+
+        opt_calc = next(c for c in calcs if c.type == CalculationType.opt)
+        freq_calc = next(c for c in calcs if c.type == CalculationType.freq)
+        sp_calc = next(c for c in calcs if c.type == CalculationType.sp)
+
+        # Primary calc is the opt (linked to the observation)
+        assert observation.calculation_id == opt_calc.id
+
+        # Freq result
+        freq_result = session.get(CalculationFreqResult, freq_calc.id)
+        assert freq_result is not None
+        assert freq_result.n_imag == 0
+        assert freq_result.zpe_hartree == pytest.approx(0.010)
+
+        # SP result
+        sp_result = session.get(CalculationSPResult, sp_calc.id)
+        assert sp_result is not None
+        assert sp_result.electronic_energy_hartree == pytest.approx(-1.195)
+
+        # Dependency edges: freq→opt and sp→opt
+        deps = session.scalars(
+            select(CalculationDependency).where(
+                CalculationDependency.parent_calculation_id == opt_calc.id
+            )
+        ).all()
+        assert len(deps) == 2
+        dep_roles = {d.dependency_role for d in deps}
+        assert CalculationDependencyRole.freq_on in dep_roles
+        assert CalculationDependencyRole.single_point_on in dep_roles
+
+        # All 3 calcs share the same geometry
+        geo_links = session.scalars(
+            select(CalculationOutputGeometry).where(
+                CalculationOutputGeometry.calculation_id.in_(
+                    [c.id for c in calcs]
+                )
+            )
+        ).all()
+        assert len(geo_links) == 3
+        assert len({g.geometry_id for g in geo_links}) == 1
+
+
+def test_conformer_upload_rejects_irc_additional() -> None:
+    """Conformer upload should reject IRC as an additional calculation type."""
+    with pytest.raises(ValueError, match="not allowed"):
+        ConformerUploadRequest(
+            species_entry={
+                "smiles": "[H]",
+                "charge": 0,
+                "multiplicity": 2,
+            },
+            geometry={"xyz_text": "1\n\nH 0 0 0"},
+            calculation={
+                "type": "opt",
+                "software_release": {"name": "Gaussian", "version": "16"},
+                "level_of_theory": {"method": "B3LYP", "basis": "6-31G(d)"},
+            },
+            additional_calculations=[
+                {
+                    "type": "irc",
+                    "software_release": {"name": "Gaussian", "version": "16"},
+                    "level_of_theory": {"method": "B3LYP", "basis": "6-31G(d)"},
+                },
+            ],
+        )

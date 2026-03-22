@@ -7,7 +7,6 @@ from sqlalchemy import (
     CheckConstraint,
     Double,
     ForeignKey,
-    Index,
     PrimaryKeyConstraint,
     Text,
 )
@@ -66,6 +65,13 @@ class Thermo(Base, TimestampMixin, CreatedByMixin):
 
     h298_kj_mol: Mapped[Optional[float]] = mapped_column(Double, nullable=True)
     s298_j_mol_k: Mapped[Optional[float]] = mapped_column(Double, nullable=True)
+
+    h298_uncertainty_kj_mol: Mapped[Optional[float]] = mapped_column(Double, nullable=True)
+    s298_uncertainty_j_mol_k: Mapped[Optional[float]] = mapped_column(Double, nullable=True)
+
+    tmin_k: Mapped[Optional[float]] = mapped_column(Double, nullable=True)
+    tmax_k: Mapped[Optional[float]] = mapped_column(Double, nullable=True)
+
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     species_entry: Mapped["SpeciesEntry"] = relationship(
@@ -95,14 +101,19 @@ class Thermo(Base, TimestampMixin, CreatedByMixin):
     )
 
     __table_args__ = (
-        Index(
-            "uq_thermo_species_entry_id",
-            "species_entry_id",
-            "scientific_origin",
-            "workflow_tool_release_id",
-            "software_release_id",
-            unique=True,
-            postgresql_nulls_not_distinct=True,
+        CheckConstraint("tmin_k IS NULL OR tmin_k > 0", name="tmin_k_gt_0"),
+        CheckConstraint("tmax_k IS NULL OR tmax_k > 0", name="tmax_k_gt_0"),
+        CheckConstraint(
+            "tmin_k IS NULL OR tmax_k IS NULL OR tmin_k <= tmax_k",
+            name="tmin_le_tmax",
+        ),
+        CheckConstraint(
+            "h298_uncertainty_kj_mol IS NULL OR h298_uncertainty_kj_mol >= 0",
+            name="h298_uncertainty_ge_0",
+        ),
+        CheckConstraint(
+            "s298_uncertainty_j_mol_k IS NULL OR s298_uncertainty_j_mol_k >= 0",
+            name="s298_uncertainty_ge_0",
         ),
     )
 
@@ -119,6 +130,7 @@ class ThermoPoint(Base):
     )
     temperature_k: Mapped[float] = mapped_column(Double, nullable=False)
 
+    cp_j_mol_k: Mapped[Optional[float]] = mapped_column(Double, nullable=True)
     h_kj_mol: Mapped[Optional[float]] = mapped_column(Double, nullable=True)
     s_j_mol_k: Mapped[Optional[float]] = mapped_column(Double, nullable=True)
     g_kj_mol: Mapped[Optional[float]] = mapped_column(Double, nullable=True)

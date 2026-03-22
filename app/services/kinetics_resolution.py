@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 import app.db.models  # noqa: F401
+from app.chemistry.units import convert_ea_to_kj_mol
 from app.db.models.kinetics import Kinetics
 from app.schemas.entities.kinetics import KineticsCreate
 from app.schemas.workflows.kinetics_upload import KineticsUploadRequest
@@ -54,7 +55,11 @@ def resolve_kinetics_upload(
         a=request.a,
         a_units=request.a_units,
         n=request.n,
-        ea_kj_mol=request.ea_kj_mol,
+        ea_kj_mol=(
+            convert_ea_to_kj_mol(request.reported_ea, request.reported_ea_units)
+            if request.reported_ea is not None
+            else None
+        ),
         tmin_k=request.tmin_k,
         tmax_k=request.tmax_k,
         degeneracy=request.degeneracy,

@@ -212,3 +212,13 @@ AGENTS.md
 
 *.pyc
 .gitnexus
+
+.claude/
+
+CLAUDE.md
+
+ARCHITECTURE.md
+
+backup_tckdb_dev_2026-03-20.sql
+
+clean_run_log.md

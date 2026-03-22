@@ -20,6 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, CreatedByMixin, TimestampMixin
 from app.db.models.common import (
+    ArrheniusAUnits,
     NetworkChannelKind,
     NetworkKineticsModelKind,
     NetworkSolveCalculationRole,
@@ -447,6 +448,10 @@ class NetworkKineticsPlog(Base):
     )
 
     a: Mapped[float] = mapped_column(Double, nullable=False)
+    a_units: Mapped[Optional[ArrheniusAUnits]] = mapped_column(
+        SAEnum(ArrheniusAUnits, name="arrhenius_a_units", create_type=False),
+        nullable=True,
+    )
     n: Mapped[float] = mapped_column(Double, nullable=False)
     ea_kj_mol: Mapped[float] = mapped_column(Double, nullable=False)
 

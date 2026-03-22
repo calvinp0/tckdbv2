@@ -8,11 +8,26 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
 import app.db.models  # noqa: F401
-from app.db.models.calculation import Calculation
+from app.db.models.calculation import (
+    Calculation,
+    CalculationDependency,
+    CalculationFreqResult,
+    CalculationOptResult,
+    CalculationOutputGeometry,
+    CalculationSPResult,
+)
+from app.db.models.common import (
+    CalculationDependencyRole,
+    CalculationGeometryRole,
+    CalculationType,
+)
 from app.db.models.level_of_theory import LevelOfTheory
 from app.db.models.workflow import WorkflowTool, WorkflowToolRelease
 from app.schemas.entities.calculation import CalculationCreateResolved
-from app.schemas.fragments.calculation import CalculationCreateRequest
+from app.schemas.fragments.calculation import (
+    CalculationCreateRequest,
+    CalculationWithResultsPayload,
+)
 from app.schemas.refs import (
     LevelOfTheoryRef,
     WorkflowToolReleaseRef,
@@ -186,3 +201,153 @@ def persist_calculation(
     session.add(calculation)
     session.flush()
     return calculation
+
+
+# ---------------------------------------------------------------------------
+# Generic "calculation + typed results + dependency edges" helpers
+# ---------------------------------------------------------------------------
+
+
+def persist_calculation_result(
+    session: Session,
+    calculation: Calculation,
+    calc_upload: CalculationWithResultsPayload,
+) -> None:
+    """Persist an optional typed result block for a calculation.
+
+    :param session: Active SQLAlchemy session.
+    :param calculation: The owning calculation row.
+    :param calc_upload: Upload payload (may have one result block set).
+    """
+
+    if calc_upload.opt_result is not None:
+        session.add(
+            CalculationOptResult(
+                calculation_id=calculation.id,
+                converged=calc_upload.opt_result.converged,
+                n_steps=calc_upload.opt_result.n_steps,
+                final_energy_hartree=calc_upload.opt_result.final_energy_hartree,
+            )
+        )
+
+    if calc_upload.freq_result is not None:
+        session.add(
+            CalculationFreqResult(
+                calculation_id=calculation.id,
+                n_imag=calc_upload.freq_result.n_imag,
+                imag_freq_cm1=calc_upload.freq_result.imag_freq_cm1,
+                zpe_hartree=calc_upload.freq_result.zpe_hartree,
+            )
+        )
+
+    if calc_upload.sp_result is not None:
+        session.add(
+            CalculationSPResult(
+                calculation_id=calculation.id,
+                electronic_energy_hartree=calc_upload.sp_result.electronic_energy_hartree,
+            )
+        )
+
+
+# Mapping from calculation type to the dependency role when the child
+# depends on the primary calculation.
+_DEPENDENCY_ROLE_FOR_TYPE: dict[CalculationType, CalculationDependencyRole] = {
+    CalculationType.freq: CalculationDependencyRole.freq_on,
+    CalculationType.sp: CalculationDependencyRole.single_point_on,
+    CalculationType.irc: CalculationDependencyRole.irc_start,
+}
+
+
+def resolve_and_persist_calculation_with_results(
+    session: Session,
+    calc_upload: CalculationWithResultsPayload,
+    *,
+    species_entry_id: int | None = None,
+    transition_state_entry_id: int | None = None,
+    created_by: int | None = None,
+) -> Calculation:
+    """Resolve provenance, persist a calculation, and attach typed results.
+
+    :param session: Active SQLAlchemy session.
+    :param calc_upload: Upload-facing calculation block with optional results.
+    :param species_entry_id: Owner species-entry id (mutually exclusive with TS).
+    :param transition_state_entry_id: Owner TS-entry id.
+    :param created_by: Optional application user id.
+    :returns: Persisted ``Calculation`` row.
+    """
+
+    request = CalculationCreateRequest(
+        type=calc_upload.type,
+        quality=calc_upload.quality,
+        species_entry_id=species_entry_id,
+        transition_state_entry_id=transition_state_entry_id,
+        software_release=calc_upload.software_release,
+        workflow_tool_release=calc_upload.workflow_tool_release,
+        level_of_theory=calc_upload.level_of_theory,
+        literature_id=calc_upload.literature_id,
+    )
+    resolved = resolve_calculation_create_request(session, request)
+    calculation = persist_calculation(session, resolved, created_by=created_by)
+    persist_calculation_result(session, calculation, calc_upload)
+    return calculation
+
+
+def persist_additional_calculations(
+    session: Session,
+    *,
+    primary_calc: Calculation,
+    additional_uploads: list[CalculationWithResultsPayload],
+    geometry_id: int,
+    species_entry_id: int | None = None,
+    transition_state_entry_id: int | None = None,
+    created_by: int | None = None,
+) -> list[Calculation]:
+    """Persist additional calculations with dependency edges to a primary.
+
+    Creates each additional calculation, links it to the shared output
+    geometry, attaches typed results, and wires a ``CalculationDependency``
+    edge back to the primary calculation.
+
+    :param session: Active SQLAlchemy session.
+    :param primary_calc: The primary calculation row (parent for deps).
+    :param additional_uploads: Additional calculation uploads.
+    :param geometry_id: Shared output geometry id.
+    :param species_entry_id: Owner species-entry id (mutually exclusive with TS).
+    :param transition_state_entry_id: Owner TS-entry id.
+    :param created_by: Optional application user id.
+    :returns: List of newly created ``Calculation`` rows.
+    """
+
+    results: list[Calculation] = []
+    for calc_upload in additional_uploads:
+        child_calc = resolve_and_persist_calculation_with_results(
+            session,
+            calc_upload,
+            species_entry_id=species_entry_id,
+            transition_state_entry_id=transition_state_entry_id,
+            created_by=created_by,
+        )
+
+        session.add(
+            CalculationOutputGeometry(
+                calculation_id=child_calc.id,
+                geometry_id=geometry_id,
+                output_order=1,
+                role=CalculationGeometryRole.final,
+            )
+        )
+
+        dep_role = _DEPENDENCY_ROLE_FOR_TYPE.get(calc_upload.type)
+        if dep_role is not None:
+            session.add(
+                CalculationDependency(
+                    parent_calculation_id=primary_calc.id,
+                    child_calculation_id=child_calc.id,
+                    dependency_role=dep_role,
+                )
+            )
+
+        results.append(child_calc)
+
+    session.flush()
+    return results

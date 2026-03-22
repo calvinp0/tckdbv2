@@ -5,11 +5,11 @@ from sqlalchemy.orm import Session
 import app.db.models  # noqa: F401
 from app.db.models.common import ReactionRole
 from app.db.models.reaction import ReactionEntry, ReactionEntryStructureParticipant
-from app.resolution.reaction import (
+from app.services.reaction_resolution import (
     compress_species_stoichiometry,
     resolve_chem_reaction,
 )
-from app.resolution.species import resolve_species_entry_reference
+from app.services.species_resolution import resolve_species_entry_reference
 from app.schemas.workflows.reaction_upload import (
     ReactionParticipantUpload,
     ReactionUploadRequest,

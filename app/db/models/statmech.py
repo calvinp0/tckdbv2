@@ -112,17 +112,6 @@ class Statmech(Base, TimestampMixin, CreatedByMixin):
             "external_symmetry IS NULL OR external_symmetry >= 1",
             name="external_symmetry_ge_1",
         ),
-        Index(
-            "uq_statmech_species_entry_id",
-            "species_entry_id",
-            "scientific_origin",
-            "literature_id",
-            "workflow_tool_release_id",
-            "software_release_id",
-            "statmech_treatment",
-            unique=True,
-            postgresql_nulls_not_distinct=True,
-        ),
     )
 
 

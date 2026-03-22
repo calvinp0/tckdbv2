@@ -15,6 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, CreatedByMixin, TimestampMixin
 from app.db.models.common import (
+    ArrheniusAUnits,
     KineticsCalculationRole,
     KineticsModelKind,
     ScientificOriginKind,
@@ -68,7 +69,10 @@ class Kinetics(Base, TimestampMixin, CreatedByMixin):
     )
 
     a: Mapped[Optional[float]] = mapped_column(Double, nullable=True)
-    a_units: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    a_units: Mapped[Optional[ArrheniusAUnits]] = mapped_column(
+        SAEnum(ArrheniusAUnits, name="arrhenius_a_units"),
+        nullable=True,
+    )
     n: Mapped[Optional[float]] = mapped_column(Double, nullable=True)
     ea_kj_mol: Mapped[Optional[float]] = mapped_column(Double, nullable=True)
 

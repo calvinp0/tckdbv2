@@ -1,10 +1,49 @@
+"""Entity schemas for literature and literature-author link models."""
+
 from typing import Self
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 from app.db.models.common import LiteratureKind
-from app.schemas.common import SchemaBase, TimestampedReadSchema
+from app.schemas.common import ORMBaseSchema, SchemaBase, TimestampedReadSchema
 from app.schemas.utils import normalize_optional_text, normalize_required_text
+
+
+# ---------------------------------------------------------------------------
+# Literature ↔ Author link
+# ---------------------------------------------------------------------------
+
+
+class LiteratureAuthorBase(BaseModel):
+    """Shared fields for a literature-author link.
+
+    :param author_id: Referenced author row.
+    :param author_order: Position in the author list (1-based).
+    """
+
+    author_id: int
+    author_order: int = Field(ge=1)
+
+
+class LiteratureAuthorCreate(LiteratureAuthorBase, SchemaBase):
+    """Nested create payload for a literature-author link."""
+
+
+class LiteratureAuthorUpdate(SchemaBase):
+    """Patch schema for a literature-author link."""
+
+    author_order: int | None = Field(default=None, ge=1)
+
+
+class LiteratureAuthorRead(LiteratureAuthorBase, ORMBaseSchema):
+    """Read schema for a literature-author link."""
+
+    literature_id: int
+
+
+# ---------------------------------------------------------------------------
+# Literature
+# ---------------------------------------------------------------------------
 
 
 class LiteratureBase(BaseModel):
@@ -43,7 +82,24 @@ class LiteratureBase(BaseModel):
 
 
 class LiteratureCreate(LiteratureBase, SchemaBase):
-    pass
+    """Create schema for a literature record.
+
+    Nested creation is supported for author links.
+    """
+
+    authors: list[LiteratureAuthorCreate] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_authors(self) -> Self:
+        ids = [a.author_id for a in self.authors]
+        if len(set(ids)) != len(ids):
+            raise ValueError("Literature authors must be unique by author_id.")
+        orders = [a.author_order for a in self.authors]
+        if len(set(orders)) != len(orders):
+            raise ValueError(
+                "Literature authors must be unique by author_order."
+            )
+        return self
 
 
 class LiteratureUpdate(SchemaBase):
@@ -84,4 +140,6 @@ class LiteratureUpdate(SchemaBase):
 
 
 class LiteratureRead(LiteratureBase, TimestampedReadSchema):
-    pass
+    """Read schema for a literature record."""
+
+    authors: list[LiteratureAuthorRead] = Field(default_factory=list)

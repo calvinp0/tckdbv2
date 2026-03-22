@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 from pathlib import Path
 from typing import Iterator
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import Connection, create_engine, text
+from sqlalchemy.orm import Session
+
+from app.api.app import create_app
+from app.api.deps import get_current_user, get_db, get_write_db
+from app.db.models.app_user import AppUser
+from app.db.models.common import AppUserRole
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -85,3 +93,59 @@ def db_conn(db_engine) -> Iterator[Connection]:
             yield connection
         finally:
             transaction.rollback()
+
+
+# ---------------------------------------------------------------------------
+# API test fixtures
+# ---------------------------------------------------------------------------
+
+_TEST_API_KEY = "test-api-key-for-tckdb"
+_TEST_API_KEY_HASH = hashlib.sha256(_TEST_API_KEY.encode()).hexdigest()
+
+
+@pytest.fixture(scope="session")
+def _api_test_user(db_engine) -> int:
+    """Create a test user with an API key once per session.
+
+    Committed so it's visible to all test-scoped sessions.
+    """
+    with Session(db_engine) as session:
+        with session.begin():
+            user = AppUser(
+                username="testuser",
+                role=AppUserRole.user,
+                api_key_hash=_TEST_API_KEY_HASH,
+            )
+            session.add(user)
+            session.flush()
+            user_id = user.id
+    return user_id
+
+
+@pytest.fixture
+def client(db_engine, _api_test_user) -> Iterator[TestClient]:
+    """TestClient with per-test transaction rollback.
+
+    The session is bound to a connection with an open transaction that is
+    rolled back after the test, so no data persists between tests.
+    """
+    app = create_app()
+
+    connection = db_engine.connect()
+    transaction = connection.begin()
+    session = Session(bind=connection, expire_on_commit=False)
+
+    # Override both DB dependencies to use our transactional session
+    app.dependency_overrides[get_db] = lambda: session
+    app.dependency_overrides[get_write_db] = lambda: session
+
+    # Override auth to return the pre-seeded test user
+    test_user = session.get(AppUser, _api_test_user)
+    app.dependency_overrides[get_current_user] = lambda: test_user
+
+    with TestClient(app) as c:
+        yield c
+
+    session.close()
+    transaction.rollback()
+    connection.close()

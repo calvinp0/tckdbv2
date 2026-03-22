@@ -269,7 +269,9 @@ class ConformerObservation(Base, TimestampMixin, CreatedByMixin):
     conformer_group: Mapped["ConformerGroup"] = relationship(
         back_populates="observations"
     )
-    calculation: Mapped["Calculation"] = relationship()
+    calculation: Mapped["Calculation"] = relationship(
+        foreign_keys="ConformerObservation.calculation_id",
+    )
     assignment_scheme: Mapped[Optional["ConformerAssignmentScheme"]] = relationship(
         back_populates="observations"
     )

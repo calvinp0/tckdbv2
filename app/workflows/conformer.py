@@ -6,42 +6,17 @@ import app.db.models  # noqa: F401
 from app.db.models.calculation import CalculationOutputGeometry
 from app.db.models.common import CalculationGeometryRole
 from app.db.models.species import ConformerObservation
-from app.resolution.conformer import resolve_conformer_group
-from app.resolution.geometry import resolve_geometry_payload
-from app.resolution.species import resolve_species_entry
-from app.schemas.fragments.calculation import (
-    CalculationCreateRequest,
-    CalculationPayload,
-)
 from app.schemas.workflows.conformer_upload import ConformerUploadRequest
 from app.services.calculation_resolution import (
-    persist_calculation,
-    resolve_calculation_create_request,
+    persist_additional_calculations,
+    resolve_and_persist_calculation_with_results,
 )
+from app.services.conformer_resolution import resolve_conformer_group
+from app.services.energy_correction_resolution import create_applied_energy_correction
+from app.services.geometry_resolution import resolve_geometry_payload
+from app.services.species_resolution import resolve_species_entry
 from app.services.statmech_resolution import resolve_or_create_statmech
-
-
-def _calculation_request_from_upload(
-    payload: CalculationPayload,
-    *,
-    species_entry_id: int,
-) -> CalculationCreateRequest:
-    """Translate upload calculation data into a calculation-request payload.
-
-    :param payload: Upload-facing calculation provenance payload.
-    :param species_entry_id: Resolved owner species-entry id.
-    :returns: Calculation create request for the calculation resolver service.
-    """
-
-    return CalculationCreateRequest(
-        type=payload.type,
-        quality=payload.quality,
-        species_entry_id=species_entry_id,
-        software_release=payload.software_release,
-        workflow_tool_release=payload.workflow_tool_release,
-        level_of_theory=payload.level_of_theory,
-        literature_id=payload.literature_id,
-    )
+from app.services.transport_resolution import resolve_and_create_transport
 
 
 def persist_conformer_upload(
@@ -65,16 +40,10 @@ def persist_conformer_upload(
     )
     geometry = resolve_geometry_payload(session, request.geometry)
 
-    calculation_request = _calculation_request_from_upload(
+    calculation = resolve_and_persist_calculation_with_results(
+        session,
         request.calculation,
         species_entry_id=species_entry.id,
-    )
-    calculation_resolved = resolve_calculation_create_request(
-        session, calculation_request
-    )
-    calculation = persist_calculation(
-        session,
-        calculation_resolved,
         created_by=created_by,
     )
 
@@ -86,6 +55,17 @@ def persist_conformer_upload(
             role=CalculationGeometryRole.final,
         )
     )
+
+    additional_calcs = []
+    if request.additional_calculations:
+        additional_calcs = persist_additional_calculations(
+            session,
+            primary_calc=calculation,
+            additional_uploads=request.additional_calculations,
+            geometry_id=geometry.id,
+            species_entry_id=species_entry.id,
+            created_by=created_by,
+        )
 
     conformer_group = resolve_conformer_group(
         session,
@@ -101,6 +81,13 @@ def persist_conformer_upload(
         created_by=created_by,
     )
     session.add(observation)
+    session.flush()
+
+    # Anchor ALL calculations (primary + additional) to this conformer
+    # observation so the structure context is unambiguous.
+    calculation.conformer_observation_id = observation.id
+    for child_calc in additional_calcs:
+        child_calc.conformer_observation_id = observation.id
 
     if request.statmech is not None:
         resolve_or_create_statmech(
@@ -108,6 +95,36 @@ def persist_conformer_upload(
             request.statmech,
             species_entry_id=species_entry.id,
             uploaded_calculation_id=calculation.id,
+            created_by=created_by,
+        )
+
+    if request.transport is not None:
+        resolve_and_create_transport(
+            session,
+            request.transport,
+            species_entry_id=species_entry.id,
+            created_by=created_by,
+        )
+
+    for correction_payload in request.applied_energy_corrections:
+        # Resolve local string keys to IDs.
+        # source_conformer_key always resolves to the observation just created.
+        source_conf_id = (
+            observation.id
+            if correction_payload.source_conformer_key is not None
+            else None
+        )
+        source_calc_id = (
+            calculation.id
+            if correction_payload.source_calculation_key is not None
+            else None
+        )
+        create_applied_energy_correction(
+            session,
+            correction_payload,
+            target_species_entry_id=species_entry.id,
+            source_conformer_observation_id=source_conf_id,
+            source_calculation_id=source_calc_id,
             created_by=created_by,
         )
 

@@ -2,11 +2,17 @@ from typing import Self
 
 from pydantic import Field, field_validator, model_validator
 
-from app.db.models.common import KineticsModelKind, ScientificOriginKind
+from app.chemistry.units import validate_a_units_for_molecularity
+from app.db.models.common import (
+    ActivationEnergyUnits,
+    ArrheniusAUnits,
+    KineticsModelKind,
+    ScientificOriginKind,
+)
 from app.schemas.common import SchemaBase
 from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
 from app.schemas.reaction_family import find_canonical_reaction_family
-from app.schemas.refs import SoftwareReleaseRef, WorkflowToolReleaseRef
+from app.schemas.refs import LevelOfTheoryRef, SoftwareReleaseRef, WorkflowToolReleaseRef
 from app.schemas.utils import normalize_optional_text
 from app.schemas.workflows.literature_submission import LiteratureSubmissionRequest
 
@@ -72,16 +78,25 @@ class KineticsUploadRequest(SchemaBase):
     The backend resolves reaction identity/entry, optional literature, and
     optional software/workflow provenance, then creates the kinetics row.
 
-    :param reaction: Workflow reaction payload used to resolve/create a reaction entry.
-    :param scientific_origin: Scientific origin category for this kinetics record.
+    For computed kinetics, ``energy_level_of_theory`` declares the SP level
+    of theory used for the electronic energies.  The backend automatically
+    finds the matching SP calculations on each reaction participant's
+    conformer and links them as source calculations.  If the lookup is
+    ambiguous (e.g., multiple conformers), the upload fails with a clear
+    error.
+
+    :param reaction: Reaction described by scientific content.
+    :param scientific_origin: Scientific origin category.
     :param model_kind: Kinetics functional form.
+    :param energy_level_of_theory: SP level of theory for source-calc auto-resolution.
     :param literature: Optional literature submission payload.
-    :param software_release: Optional software provenance reference.
+    :param software_release: Optional software provenance reference (fitting tool).
     :param workflow_tool_release: Optional workflow-tool provenance reference.
     :param a: Optional Arrhenius pre-exponential factor.
     :param a_units: Optional units for the pre-exponential factor.
     :param n: Optional temperature exponent.
-    :param ea_kj_mol: Optional activation energy in kJ/mol.
+    :param reported_ea: Optional activation energy in reported units.
+    :param reported_ea_units: Units for ``reported_ea`` (required when reported).
     :param tmin_k: Optional minimum valid temperature in K.
     :param tmax_k: Optional maximum valid temperature in K.
     :param degeneracy: Optional reaction-path degeneracy.
@@ -93,14 +108,17 @@ class KineticsUploadRequest(SchemaBase):
     scientific_origin: ScientificOriginKind
     model_kind: KineticsModelKind = KineticsModelKind.modified_arrhenius
 
+    energy_level_of_theory: LevelOfTheoryRef | None = None
+
     literature: LiteratureSubmissionRequest | None = None
     software_release: SoftwareReleaseRef | None = None
     workflow_tool_release: WorkflowToolReleaseRef | None = None
 
     a: float | None = None
-    a_units: str | None = None
+    a_units: ArrheniusAUnits | None = None
     n: float | None = None
-    ea_kj_mol: float | None = None
+    reported_ea: float | None = None
+    reported_ea_units: ActivationEnergyUnits | None = None
 
     tmin_k: float | None = Field(default=None, gt=0)
     tmax_k: float | None = Field(default=None, gt=0)
@@ -111,9 +129,18 @@ class KineticsUploadRequest(SchemaBase):
 
     @model_validator(mode="after")
     def normalize_optional_text_fields(self) -> Self:
-        self.a_units = normalize_optional_text(self.a_units)
         self.tunneling_model = normalize_optional_text(self.tunneling_model)
         self.note = normalize_optional_text(self.note)
+        return self
+
+    @model_validator(mode="after")
+    def validate_reported_ea_pair(self) -> Self:
+        has_value = self.reported_ea is not None
+        has_units = self.reported_ea_units is not None
+        if has_value != has_units:
+            raise ValueError(
+                "reported_ea and reported_ea_units must both be provided or both omitted."
+            )
         return self
 
     @model_validator(mode="after")
@@ -124,4 +151,12 @@ class KineticsUploadRequest(SchemaBase):
             and self.tmin_k > self.tmax_k
         ):
             raise ValueError("tmin_k must be less than or equal to tmax_k.")
+        return self
+
+    @model_validator(mode="after")
+    def validate_a_units_vs_molecularity(self) -> Self:
+        if self.a_units is None:
+            return self
+        molecularity = len(self.reaction.reactants)
+        validate_a_units_for_molecularity(self.a_units, molecularity)
         return self

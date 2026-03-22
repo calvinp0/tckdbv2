@@ -156,6 +156,23 @@ class ThermoCalculationRole(str, Enum):
     imported = "imported"
 
 
+class ActivationEnergyUnits(str, Enum):
+    j_mol = "j_mol"
+    kj_mol = "kj_mol"
+    cal_mol = "cal_mol"
+    kcal_mol = "kcal_mol"
+
+
+class ArrheniusAUnits(str, Enum):
+    per_s = "per_s"
+    cm3_mol_s = "cm3_mol_s"
+    cm3_molecule_s = "cm3_molecule_s"
+    m3_mol_s = "m3_mol_s"
+    cm6_mol2_s = "cm6_mol2_s"
+    cm6_molecule2_s = "cm6_molecule2_s"
+    m6_mol2_s = "m6_mol2_s"
+
+
 class KineticsModelKind(str, Enum):
     arrhenius = "arrhenius"
     modified_arrhenius = "modified_arrhenius"
@@ -233,3 +250,70 @@ class NetworkSolveCalculationRole(str, Enum):
     barrier_freq = "barrier_freq"
     master_equation_run = "master_equation_run"
     fit_source = "fit_source"
+
+
+class TransportCalculationRole(str, Enum):
+    full_transport = "full_transport"
+    dipole = "dipole"
+    polarizability = "polarizability"
+    supporting_geometry = "supporting_geometry"
+
+
+# ---------------------------------------------------------------------------
+# Energy corrections & frequency scale factors
+# ---------------------------------------------------------------------------
+
+
+class EnergyCorrectionSchemeKind(str, Enum):
+    atom_energy = "atom_energy"
+    atom_hf = "atom_hf"
+    atom_thermal = "atom_thermal"
+    soc = "soc"
+    bac_petersson = "bac_petersson"
+    bac_melius = "bac_melius"
+    isodesmic = "isodesmic"
+    other = "other"
+
+
+class MeliusBacComponentKind(str, Enum):
+    """Melius-type BAC parameter sub-types (reference layer)."""
+
+    atom_corr = "atom_corr"
+    bond_corr_length = "bond_corr_length"
+    bond_corr_neighbor = "bond_corr_neighbor"
+    mol_corr = "mol_corr"
+
+
+class FrequencyScaleKind(str, Enum):
+    fundamental = "fundamental"
+    zpe = "zpe"
+    enthalpy = "enthalpy"
+    entropy = "entropy"
+    heat_capacity = "heat_capacity"
+
+
+class AppliedCorrectionComponentKind(str, Enum):
+    """Broad categories of what correction contribution was applied."""
+
+    atom = "atom"
+    bond = "bond"
+    molecular = "molecular"
+    zpe_scale = "zpe_scale"
+    soc = "soc"
+    other = "other"
+
+
+class EnergyCorrectionApplicationRole(str, Enum):
+    """Semantic role of an applied energy correction result."""
+
+    zpe = "zpe"
+    thermal_correction_energy = "thermal_correction_energy"
+    thermal_correction_enthalpy = "thermal_correction_enthalpy"
+    thermal_correction_gibbs = "thermal_correction_gibbs"
+    entropy_contribution = "entropy_contribution"
+    bac_total = "bac_total"
+    aec_total = "aec_total"
+    soc_total = "soc_total"
+    atomization_reference_adjustment = "atomization_reference_adjustment"
+    composite_delta = "composite_delta"
+    custom = "custom"

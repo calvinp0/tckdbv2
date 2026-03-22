@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 import app.db.models  # noqa: F401
 from app.db.models.network import Network
-from app.resolution.species import resolve_species_entry
+from app.services.species_resolution import resolve_species_entry
 from app.schemas.workflows.network_upload import NetworkUploadRequest
 from app.schemas.workflows.reaction_upload import ReactionUploadRequest
 from app.services.network_resolution import persist_network, resolve_network_upload

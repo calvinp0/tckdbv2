@@ -3,6 +3,7 @@ from typing import Self
 from pydantic import BaseModel, Field, model_validator
 
 from app.db.models.common import (
+    ArrheniusAUnits,
     KineticsCalculationRole,
     KineticsModelKind,
     ScientificOriginKind,
@@ -78,7 +79,7 @@ class KineticsBase(BaseModel):
     software_release_id: int | None = None
 
     a: float | None = None
-    a_units: str | None = None
+    a_units: ArrheniusAUnits | None = None
     n: float | None = None
     ea_kj_mol: float | None = None
 
@@ -136,7 +137,7 @@ class KineticsUpdate(SchemaBase):
     software_release_id: int | None = None
 
     a: float | None = None
-    a_units: str | None = None
+    a_units: ArrheniusAUnits | None = None
     n: float | None = None
     ea_kj_mol: float | None = None
 

@@ -4,6 +4,7 @@ Pipeline (single transaction):
 1. Resolve species (local key → species_entry)
 2. Process conformers (geometry + opt calc + conformer group/observation)
 3. Process species-level additional calculations (sp, freq — with geometry_key lookups)
+3b. Process species-level transport (if provided)
 4. Resolve micro reactions (local key → reaction_entry)
 5. Process transition states (TS → TS entry → geometry → calcs)
 6. Create network + states + channels + flat membership + reaction links
@@ -40,9 +41,9 @@ from app.db.models.network_pdep import (
 )
 from app.db.models.species import ConformerObservation
 from app.db.models.transition_state import TransitionState, TransitionStateEntry
-from app.resolution.conformer import resolve_conformer_group
-from app.resolution.geometry import resolve_geometry_payload
-from app.resolution.species import resolve_species_entry
+from app.services.conformer_resolution import resolve_conformer_group
+from app.services.geometry_resolution import resolve_geometry_payload
+from app.services.species_resolution import resolve_species_entry
 from app.schemas.fragments.calculation import CalculationCreateRequest
 from app.schemas.geometry import GeometryPayload
 from app.schemas.workflows.network_pdep_upload import (
@@ -60,6 +61,7 @@ from app.services.calculation_resolution import (
 )
 from app.services.literature_resolution import resolve_or_create_literature
 from app.services.software_resolution import resolve_software_release_ref
+from app.services.transport_resolution import resolve_and_create_transport
 from app.workflows.reaction import persist_reaction_upload
 
 
@@ -247,6 +249,18 @@ def persist_network_pdep_upload(
                 created_by=created_by,
             )
             calculation_key_to_id[calc_in.key] = calculation.id
+
+    # ------------------------------------------------------------------
+    # 3b. Process species-level transport
+    # ------------------------------------------------------------------
+    for sp in request.species:
+        if sp.transport is not None:
+            resolve_and_create_transport(
+                session,
+                sp.transport,
+                species_entry_id=species_key_to_entry[sp.key].id,
+                created_by=created_by,
+            )
 
     # ------------------------------------------------------------------
     # 4. Resolve micro reactions

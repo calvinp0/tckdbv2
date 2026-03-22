@@ -152,8 +152,9 @@ def test_species_entry_identity_rejects_duplicate_null_identity(db_conn) -> None
     )
 
 
-def test_thermo_dedupe_rejects_duplicate_null_provenance_tuple(db_conn) -> None:
-    species_id = _create_species(db_conn, inchi_key=_next_inchi_key("THERMODEDUPE"))
+def test_thermo_allows_multiple_records_per_species_entry(db_conn) -> None:
+    """Thermo is a result table — multiple records per species entry are valid."""
+    species_id = _create_species(db_conn, inchi_key=_next_inchi_key("THERMOMULTI"))
     species_entry_id = _create_species_entry(db_conn, species_id)
 
     db_conn.execute(
@@ -164,12 +165,12 @@ def test_thermo_dedupe_rejects_duplicate_null_provenance_tuple(db_conn) -> None:
         {"species_entry_id": species_entry_id},
     )
 
-    _assert_integrity_error(
-        db_conn,
-        """
-        INSERT INTO thermo (species_entry_id, scientific_origin)
-        VALUES (:species_entry_id, 'computed')
-        """,
+    # Second insert with identical provenance tuple must succeed
+    db_conn.execute(
+        text("""
+            INSERT INTO thermo (species_entry_id, scientific_origin)
+            VALUES (:species_entry_id, 'computed')
+            """),
         {"species_entry_id": species_entry_id},
     )
 

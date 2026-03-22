@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from app.db.models.geometry import Geometry
     from app.db.models.level_of_theory import LevelOfTheory
     from app.db.models.software import SoftwareRelease
-    from app.db.models.species import SpeciesEntry
+    from app.db.models.species import ConformerObservation, SpeciesEntry
     from app.db.models.transition_state import TransitionStateEntry
     from app.db.models.workflow import WorkflowToolRelease
 
@@ -85,6 +85,14 @@ class Calculation(Base, TimestampMixin, CreatedByMixin):
         nullable=True,
     )
 
+    conformer_observation_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "conformer_observation.id", deferrable=True, initially="IMMEDIATE"
+        ),
+        nullable=True,
+    )
+
     species_entry: Mapped[Optional["SpeciesEntry"]] = relationship(
         back_populates="calculations",
         foreign_keys=[species_entry_id],
@@ -100,6 +108,9 @@ class Calculation(Base, TimestampMixin, CreatedByMixin):
         back_populates="calculations"
     )
     lot: Mapped[Optional["LevelOfTheory"]] = relationship(back_populates="calculations")
+    conformer_observation: Mapped[Optional["ConformerObservation"]] = relationship(
+        foreign_keys=[conformer_observation_id],
+    )
 
     input_geometries: Mapped[list["CalculationInputGeometry"]] = relationship(
         back_populates="calculation",
