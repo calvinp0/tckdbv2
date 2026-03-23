@@ -93,6 +93,7 @@ class ComputedReactionUploadResult(BaseModel):
     transition_state_entry_id: int | None = None
     kinetics_ids: list[int]
     thermo_ids: list[int]
+    species_entry_ids: list[int]
     species_count: int
 
 

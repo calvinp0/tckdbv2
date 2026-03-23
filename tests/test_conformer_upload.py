@@ -83,7 +83,7 @@ def test_persist_conformer_upload_creates_expected_rows(db_engine) -> None:
                 )
             )
             assert conformer_group is not None
-            assert conformer_group.label == "conf-a"
+            assert conformer_group.label == "conformer_1"
 
             assert session.scalar(select(Species)) is not None
             assert session.scalar(select(SpeciesEntry)) is not None

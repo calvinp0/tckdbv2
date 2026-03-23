@@ -469,5 +469,6 @@ def persist_computed_reaction_upload(
         "transition_state_entry_id": ts_entry.id if ts_entry else None,
         "kinetics_ids": kinetics_ids,
         "thermo_ids": thermo_ids,
+        "species_entry_ids": [e.id for e in species_key_to_entry.values()],
         "species_count": len(request.species),
     }

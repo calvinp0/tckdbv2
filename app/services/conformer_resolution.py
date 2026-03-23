@@ -6,7 +6,7 @@ Falls back to label matching when torsion data is unavailable.
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.chemistry.torsion_fingerprint import (
@@ -155,21 +155,30 @@ def resolve_conformer_group(
         if best_group is not None:
             return best_group, new_fp, scheme
 
-    # Fallback: label matching (for missing geometry data)
-    if label is not None:
-        existing = session.scalar(
+    # Fallback for trivial cases (single atoms, fingerprint computation failures):
+    # If we have no fingerprint, join the first existing group that also has no
+    # fingerprint. This prevents single-atom species from spawning a new group
+    # on every upload.
+    if new_fp is None:
+        existing_no_fp = session.scalar(
             select(ConformerGroup).where(
                 ConformerGroup.species_entry_id == species_entry.id,
-                ConformerGroup.label == label,
-            )
+                ConformerGroup.representative_fingerprint_json.is_(None),
+            ).order_by(ConformerGroup.id)
         )
-        if existing is not None:
-            return existing, new_fp, scheme
+        if existing_no_fp is not None:
+            return existing_no_fp, None, scheme
 
-    # No match — create new group with representative fingerprint + coords
+    # No match found — create new group with auto-generated label
+    next_index = (session.scalar(
+        select(func.count(ConformerGroup.id)).where(
+            ConformerGroup.species_entry_id == species_entry.id,
+        )
+    ) or 0) + 1
+
     new_group = ConformerGroup(
         species_entry_id=species_entry.id,
-        label=label,
+        label=f"conformer_{next_index}",
         representative_fingerprint_json=new_fp.to_dict() if new_fp is not None else None,
         representative_coords_json=new_coords,
         created_by=created_by,
@@ -191,20 +200,25 @@ def _reconstruct_fingerprint(fp_data: dict) -> TorsionFingerprint | None:
         bins = fp_data.get("quantized_bins", [])
         bin_width = fp_data.get("bin_width_deg", 15.0)
 
-        if not rotor_keys or len(rotor_keys) != len(folded):
+        if len(rotor_keys) != len(folded):
             return None
 
-        # Reconstruct minimal RotorSlot objects from canonical keys
+        # Reconstruct minimal RotorSlot objects from canonical keys.
+        # The key format is "R_{rank_lo}_{rank_hi}" and canonical_key
+        # is computed from canonical_rank_begin/end, so we must set those.
         slots = []
         for key in rotor_keys:
             parts = key.split("_")
             if len(parts) != 3:
                 return None
+            rank_lo, rank_hi = int(parts[1]), int(parts[2])
             slots.append(RotorSlot(
-                bond_begin=int(parts[1]),
-                bond_end=int(parts[2]),
-                terminal_a=0,  # not needed for comparison
+                bond_begin=0,
+                bond_end=0,
+                terminal_a=0,
                 terminal_d=0,
+                canonical_rank_begin=rank_lo,
+                canonical_rank_end=rank_hi,
                 symmetry_fold=1,  # stored implicitly in folded values
             ))
 

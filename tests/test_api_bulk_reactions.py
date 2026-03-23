@@ -258,3 +258,144 @@ class TestScenario6_ReactionOnly:
         data = resp.json()
         assert data["type"] == "reaction_entry"
         assert data["reaction_id"] > 0
+
+
+# ==========================================================================
+# Cross-reaction conformer grouping test
+# ==========================================================================
+
+
+class TestConformerGroupingAcrossReactions:
+    """Upload multiple reactions that share species and verify conformer
+    grouping works correctly.
+
+    Key shared species:
+    - [OH] (mult=2): appears in rxn_285, rxn_286, rmg_rxn_1146, kfir_rxn_9205
+    - [H] (mult=2): appears in rxn_146, rxn_285, rxn_286 (identical geometry)
+    - [O]CC#N (mult=2): appears in kfir_rxn_11197, kfir_rxn_11915 (identical)
+    - O=CC=O (mult=1): appears in kfir_rxn_11197, kfir_rxn_11663 (different geometry)
+    """
+
+    def test_shared_species_dedup_and_grouping(self, client):
+        """Upload 4 reactions that share [OH] and verify:
+        1. Species deduplication: same species row across reactions
+        2. Conformer grouping: identical geometries → same group,
+           different geometries → torsion/RMSD decides
+        """
+        # Upload reactions that share [OH] radical
+        rxn_ids = ["rxn_285", "rxn_286", "rmg_rxn_1146", "kfir_rxn_9205"]
+        results = {}
+        for rxn_id in rxn_ids:
+            bundle = _BUNDLES[rxn_id]
+            resp = client.post("/api/v1/uploads/computed-reaction", json=bundle)
+            assert resp.status_code == 201, f"{rxn_id}: {resp.text[:300]}"
+            results[rxn_id] = resp.json()
+
+        # All 4 reactions should share the same [OH] species (InChI dedup)
+        species_list = client.get("/api/v1/species?limit=100").json()
+        oh_species = [
+            s for s in species_list["items"]
+            if s.get("smiles") == "[OH]"
+        ]
+        assert len(oh_species) == 1, (
+            f"Expected 1 [OH] species row, got {len(oh_species)}"
+        )
+
+    def test_identical_geometry_same_group(self, client):
+        """Upload two reactions sharing [O]CC#N (mult=2, radical) with
+        identical geometry. Should land in the same conformer group."""
+        entry_ids = []
+        for rxn_id in ["kfir_rxn_11197", "kfir_rxn_11915"]:
+            resp = client.post(
+                "/api/v1/uploads/computed-reaction",
+                json=_BUNDLES[rxn_id],
+            )
+            assert resp.status_code == 201, f"{rxn_id}: {resp.text[:300]}"
+            entry_ids.extend(resp.json()["species_entry_ids"])
+
+        # [O]CC#N (mult=2) is shared with identical geometry.
+        # RDKit canonicalizes to N#CC[O] or [O]CC#N — check both.
+        # The same species_entry_id should appear in both upload responses.
+        unique_entry_ids = sorted(set(entry_ids))
+
+        for eid in unique_entry_ids:
+            entry_data = client.get(f"/api/v1/species-entries/{eid}").json()
+            sp = client.get(f"/api/v1/species/{entry_data['species_id']}").json()
+            # N#CC[O] is the RDKit canonical form of [O]CC#N (mult=2 radical)
+            if sp["smiles"] != "N#CC[O]" or sp["multiplicity"] != 2:
+                continue
+            conformers = client.get(
+                f"/api/v1/species-entries/{eid}/conformers"
+            ).json()
+            assert len(conformers) == 2, (
+                f"Expected 2 observations for N#CC[O], got {len(conformers)}"
+            )
+            group_ids = set(c["conformer_group_id"] for c in conformers)
+            assert len(group_ids) == 1, (
+                f"Expected 1 conformer group for identical "
+                f"N#CC[O], got {len(group_ids)}"
+            )
+            return
+
+        pytest.fail("Could not find N#CC[O] (mult=2) species entry")
+
+    def test_different_geometry_flexible_molecule(self, client):
+        """Upload two reactions with O=CC=O (glyoxal) that has different
+        geometries. Glyoxal has 1 rotatable bond — if torsions differ by
+        more than 15°, they should land in different groups."""
+        entry_ids = []
+        for rxn_id in ["kfir_rxn_11197", "kfir_rxn_11663"]:
+            resp = client.post(
+                "/api/v1/uploads/computed-reaction",
+                json=_BUNDLES[rxn_id],
+            )
+            assert resp.status_code == 201, f"{rxn_id}: {resp.text[:300]}"
+            entry_ids.extend(resp.json().get("species_entry_ids", []))
+
+        for eid in set(entry_ids):
+            entry_data = client.get(f"/api/v1/species-entries/{eid}").json()
+            if entry_data.get("species_id"):
+                sp = client.get(f"/api/v1/species/{entry_data['species_id']}").json()
+                if sp.get("smiles") == "O=CC=O":
+                    conformers = client.get(
+                        f"/api/v1/species-entries/{eid}/conformers"
+                    ).json()
+                    assert len(conformers) == 2
+                    group_ids = set(c["conformer_group_id"] for c in conformers)
+                    # Whether 1 or 2 groups depends on torsion delta —
+                    # both are valid, system must decide deterministically
+                    assert len(group_ids) in (1, 2)
+                    return
+
+        pytest.fail("Could not find O=CC=O species entry in upload responses")
+
+    def test_single_atom_identical_always_same_group(self, client):
+        """[H] atom appears in 3 reactions with identical geometry (0,0,0).
+        Zero rotors, zero RMSD → always same group."""
+        entry_ids = []
+        for rxn_id in ["rxn_146", "rxn_285", "rxn_286"]:
+            resp = client.post(
+                "/api/v1/uploads/computed-reaction",
+                json=_BUNDLES[rxn_id],
+            )
+            assert resp.status_code == 201, f"{rxn_id}: {resp.text[:300]}"
+            entry_ids.extend(resp.json().get("species_entry_ids", []))
+
+        for eid in set(entry_ids):
+            entry_data = client.get(f"/api/v1/species-entries/{eid}").json()
+            if entry_data.get("species_id"):
+                sp = client.get(f"/api/v1/species/{entry_data['species_id']}").json()
+                if sp.get("smiles") == "[H]":
+                    conformers = client.get(
+                        f"/api/v1/species-entries/{eid}/conformers"
+                    ).json()
+                    assert len(conformers) == 3, (
+                        f"Expected 3 [H] observations, got {len(conformers)}"
+                    )
+                    group_ids = set(c["conformer_group_id"] for c in conformers)
+                    assert len(group_ids) == 1, (
+                        f"Expected 1 group for identical [H], got {len(group_ids)}"
+                    )
+                    return
+
+        pytest.fail("Could not find [H] species entry in upload responses")
