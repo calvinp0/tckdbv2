@@ -6,3 +6,4 @@
 | 0002 | [Transport LJ Pair Validation](0002-transport-lj-pair-validation.md) | 2026-03-20 | Accepted |
 | 0003 | [Energy Correction Two-Layer Architecture](0003-energy-correction-two-layer-architecture.md) | 2026-03-21 | Accepted |
 | 0004 | [Calculation Structure-Level Provenance](0004-calculation-structure-level-provenance.md) | 2026-03-22 | Accepted |
+| 0005 | [Conformer Group Assignment by Torsional Basin Matching](0005-conformer-group-torsional-basin-matching.md) | 2026-03-22 | Accepted |

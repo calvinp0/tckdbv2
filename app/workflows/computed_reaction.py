@@ -11,6 +11,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 import app.db.models  # noqa: F401
+from app.chemistry.geometry import parse_xyz
 from app.chemistry.units import convert_ea_to_kj_mol
 from app.db.models.calculation import Calculation, CalculationOutputGeometry
 from app.db.models.common import (
@@ -175,8 +176,10 @@ def persist_computed_reaction_upload(
             )
             calculation_key_to_id[conf.calculation.key] = calculation.id
 
-            conformer_group = resolve_conformer_group(
-                session, species_entry, label=conf.label, created_by=created_by
+            parsed = parse_xyz(GeometryPayload(xyz_text=conf.geometry.xyz_text))
+            conformer_group, fingerprint, scheme = resolve_conformer_group(
+                session, species_entry, label=conf.label, created_by=created_by,
+                smiles=sp.species_entry.smiles, xyz_atoms=parsed.atoms,
             )
             observation = ConformerObservation(
                 conformer_group_id=conformer_group.id,
@@ -184,6 +187,10 @@ def persist_computed_reaction_upload(
                 scientific_origin=conf.scientific_origin,
                 note=conf.note,
                 created_by=created_by,
+                assignment_scheme_id=scheme.id if scheme else None,
+                torsion_fingerprint_json=(
+                    fingerprint.to_dict() if fingerprint else None
+                ),
             )
             session.add(observation)
             session.flush()

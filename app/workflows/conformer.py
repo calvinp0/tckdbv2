@@ -3,9 +3,11 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 import app.db.models  # noqa: F401
+from app.chemistry.geometry import parse_xyz
 from app.db.models.calculation import CalculationOutputGeometry
 from app.db.models.common import CalculationGeometryRole
 from app.db.models.species import ConformerObservation
+from app.schemas.geometry import GeometryPayload
 from app.schemas.workflows.conformer_upload import ConformerUploadRequest
 from app.services.calculation_resolution import (
     persist_additional_calculations,
@@ -67,11 +69,17 @@ def persist_conformer_upload(
             created_by=created_by,
         )
 
-    conformer_group = resolve_conformer_group(
+    # Parse XYZ for torsion fingerprinting
+    parsed = parse_xyz(GeometryPayload(xyz_text=request.geometry.xyz_text))
+    smiles = request.species_entry.smiles
+
+    conformer_group, fingerprint, scheme = resolve_conformer_group(
         session,
         species_entry,
         label=request.label,
         created_by=created_by,
+        smiles=smiles,
+        xyz_atoms=parsed.atoms,
     )
     observation = ConformerObservation(
         conformer_group_id=conformer_group.id,
@@ -79,6 +87,8 @@ def persist_conformer_upload(
         scientific_origin=request.scientific_origin,
         note=request.note,
         created_by=created_by,
+        assignment_scheme_id=scheme.id if scheme is not None else None,
+        torsion_fingerprint_json=fingerprint.to_dict() if fingerprint is not None else None,
     )
     session.add(observation)
     session.flush()

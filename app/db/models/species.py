@@ -203,6 +203,12 @@ class ConformerGroup(Base, TimestampMixin, CreatedByMixin):
 
     label: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    representative_fingerprint_json: Mapped[Optional[dict]] = mapped_column(
+        JSONB, nullable=True
+    )
+    representative_coords_json: Mapped[Optional[list]] = mapped_column(
+        JSONB, nullable=True
+    )
 
     species_entry: Mapped["SpeciesEntry"] = relationship(
         back_populates="conformer_groups"
@@ -265,6 +271,9 @@ class ConformerObservation(Base, TimestampMixin, CreatedByMixin):
     )
 
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    torsion_fingerprint_json: Mapped[Optional[dict]] = mapped_column(
+        JSONB, nullable=True
+    )
 
     conformer_group: Mapped["ConformerGroup"] = relationship(
         back_populates="observations"

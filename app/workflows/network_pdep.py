@@ -19,6 +19,7 @@ import json
 from sqlalchemy.orm import Session
 
 import app.db.models  # noqa: F401
+from app.chemistry.geometry import parse_xyz
 from app.db.models.calculation import (
     CalculationFreqResult,
     CalculationOptResult,
@@ -217,12 +218,15 @@ def persist_network_pdep_upload(
             )
             calculation_key_to_id[conf.calculation.key] = calculation.id
 
-            # Create conformer group + observation
-            conformer_group = resolve_conformer_group(
+            # Create conformer group + observation (with torsion matching)
+            parsed = parse_xyz(GeometryPayload(xyz_text=conf.geometry.xyz_text))
+            conformer_group, fingerprint, scheme = resolve_conformer_group(
                 session,
                 species_entry,
                 label=conf.label,
                 created_by=created_by,
+                smiles=sp.species_entry.smiles,
+                xyz_atoms=parsed.atoms,
             )
             session.add(
                 ConformerObservation(
@@ -231,6 +235,10 @@ def persist_network_pdep_upload(
                     scientific_origin=conf.scientific_origin,
                     note=conf.note,
                     created_by=created_by,
+                    assignment_scheme_id=scheme.id if scheme else None,
+                    torsion_fingerprint_json=(
+                        fingerprint.to_dict() if fingerprint else None
+                    ),
                 )
             )
             session.flush()

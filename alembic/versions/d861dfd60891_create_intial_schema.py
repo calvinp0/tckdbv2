@@ -272,6 +272,8 @@ def upgrade() -> None:
     sa.Column('species_entry_id', sa.BigInteger(), nullable=False),
     sa.Column('label', sa.String(length=64), nullable=True),
     sa.Column('note', sa.Text(), nullable=True),
+    sa.Column('representative_fingerprint_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('representative_coords_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.Column('created_by', sa.BigInteger(), nullable=True),
     sa.ForeignKeyConstraint(['created_by'], ['app_user.id'], name=op.f('fk_conformer_group_created_by_app_user'), initially='IMMEDIATE', deferrable=True),
@@ -845,6 +847,7 @@ def upgrade() -> None:
     sa.Column('assignment_scheme_id', sa.BigInteger(), nullable=True),
     sa.Column('scientific_origin', sa.Enum('computed', 'experimental', 'estimated', name='scientific_origin_kind'), server_default='computed', nullable=False),
     sa.Column('note', sa.Text(), nullable=True),
+    sa.Column('torsion_fingerprint_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.Column('created_by', sa.BigInteger(), nullable=True),
     sa.ForeignKeyConstraint(['assignment_scheme_id'], ['conformer_assignment_scheme.id'], name=op.f('fk_conformer_observation_assignment_scheme_id_conformer_assignment_scheme'), initially='IMMEDIATE', deferrable=True),
@@ -1023,6 +1026,19 @@ def upgrade() -> None:
     )
 
     _seed_reaction_families()
+
+    # Seed default conformer assignment scheme
+    op.execute(sa.text("""
+        INSERT INTO conformer_assignment_scheme
+            (name, version, scope, description, parameters_json, is_default)
+        VALUES
+            ('torsion_basin', 'v1', 'canonical',
+             'Torsional basin matching: group conformers whose comparable '
+             'rotatable-bond torsions all differ by less than the threshold '
+             'under circular comparison with optional symmetry folding.',
+             '{"require_all_comparable_torsions_within_threshold": true, "torsion_match_threshold_degrees": 15, "use_circular_difference": true, "exclude_methyl_rotors": false, "exclude_terminal_noisy_rotors": true, "methyl_symmetry_fold": 3, "quantization_bin_degrees": 15, "rigid_fallback_use_rmsd": true, "rmsd_threshold_angstrom": 0.5, "tie_break": "closest_torsional_distance"}'::jsonb,
+             true)
+    """))
 
 
 def downgrade() -> None:
