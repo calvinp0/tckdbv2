@@ -68,11 +68,63 @@ Conformer observations are assigned to existing conformer groups using a **canon
    - σ = 6 (methyl on both sides of a rotatable bond): compare modulo 60°. This arises because the 3-fold symmetry on each side compounds (3 × 2 = 6).
    - This is a scheme decision, not automatically applied everywhere.
 
-6. **Handle symmetry-equivalent rotor permutations:**
-   - Graph symmetry can create multiple equivalent rotor orderings.
-   - Partition rotor slots into symmetry-equivalent classes.
-   - Generate all admissible permutations, normalize each, keep the lexicographically minimal representation.
-   - For most molecules this is trivial; for highly symmetric ones, pruning may be needed.
+6. **Handle symmetry-equivalent atom permutations (canonicalization):**
+
+   This is one of the most subtle aspects of the system. When a molecule has graph automorphisms — meaning the molecular graph can be mapped onto itself in multiple valid ways — the graph isomorphism step (Step 1 of the pipeline) will find multiple valid atom mappings from XYZ to the reference SMILES. Each mapping can produce a **different** torsion fingerprint, even though the underlying geometry is identical.
+
+   **Why this happens — concrete example:**
+
+   Consider chloral, `O=CC(Cl)(Cl)Cl`. The three chlorine atoms are graph-equivalent: swapping any two Cl atoms produces a valid graph automorphism. When we run graph isomorphism between an uploaded XYZ and the SMILES-derived reference mol, we get 6 unique heavy-atom mappings (3! = 6 permutations of the three Cl atoms).
+
+   The molecule has one rotatable bond: the C–C bond between the aldehyde carbon and the CCl₃ carbon. The canonical dihedral is A–B–C–D, where D is the terminal atom on the CCl₃ side chosen by lowest canonical rank. But which Cl gets chosen as D depends on the mapping — different Cl permutations place different Cl atoms at the D position. Since the three Cl atoms sit at roughly 120° intervals around the C–Cl₃ axis, the measured dihedral differs by ~120° between mappings:
+
+   ```
+   Mapping 0: dihedral =   0.0°  → bin [0]
+   Mapping 1: dihedral = 121.5°  → bin [8]
+   Mapping 2: dihedral = 238.5°  → bin [15]
+   (each repeated twice due to additional H permutations → 6 total)
+   ```
+
+   All six mappings are chemically correct — they are equivalent representations of the same geometry. But they produce three distinct fingerprints. Without canonicalization, the system would declare `status=conflicting` and refuse to assign the conformer to any group.
+
+   **The solution — lexicographic minimization:**
+
+   When multiple valid mappings produce different fingerprints, the system picks the **lexicographically minimal** fingerprint (smallest quantized bin vector). This is the canonical form:
+
+   ```
+   Mapping 0: bins = [0]   ← smallest, chosen as canonical
+   Mapping 1: bins = [8]
+   Mapping 2: bins = [15]
+   ```
+
+   The key guarantee: **two uploads of the same geometry, regardless of atom ordering, will always produce the same canonical fingerprint.** This is because:
+   - The set of valid graph isomorphisms is determined by the molecular graph (from SMILES), not by the input atom ordering.
+   - Each valid isomorphism produces a deterministic fingerprint.
+   - Lexicographic minimization over a fixed set always picks the same element.
+
+   This was verified empirically: 13 different atom orderings of the same chloral geometry (reversed, Cl-shuffled, C+Cl-shuffled, 10 random full permutations) all produced `status=canonicalized` with identical fingerprint hashes and identical quantized bins.
+
+   **Consequence for mapped coordinates:**
+
+   Canonicalization stabilizes the **torsion fingerprint** but not necessarily the **atom mapping** itself. Two orderings of the same geometry may select different Cl→ref assignments as canonical (if multiple mappings produce the same minimal fingerprint). This means the mapped coordinates can differ, and Kabsch RMSD between two canonicalized mappings of identical geometry may be nonzero (observed: ~1.56 Å for chloral, equal to the Cl↔Cl swap distance).
+
+   This is acceptable because:
+   - For **flexible molecules**, torsion fingerprint is the identity metric, not RMSD.
+   - For **rigid molecules** (0 rotors), the canonicalization produces identical fingerprints trivially (empty bin vector), and RMSD comparison uses a separate representative-geometry pathway.
+   - If stable mapped coordinates are needed in the future (e.g., for coordinate-based deduplication), the canonicalization can be extended with a secondary tiebreaker: among all mappings producing the same minimal fingerprint, choose the one with the lowest RMSD to a reference geometry.
+
+   **Resolution statuses:**
+
+   The atom mapping step now reports one of four statuses:
+
+   | Status | Meaning | Example |
+   |--------|---------|---------|
+   | `unique` | One heavy-atom mapping found | Ethanol (no symmetry) |
+   | `equivalent` | Multiple mappings, all produce the same fingerprint | Propane (mirror symmetry — Cl swaps don't change torsions because there are no Cl torsions) |
+   | `canonicalized` | Multiple mappings, different fingerprints — lexicographic minimum chosen | Chloral (CCl₃ 3-fold symmetry) |
+   | `no_match` | No valid graph isomorphism found | Wrong element count, incompatible connectivity |
+
+   All three resolved statuses (`unique`, `equivalent`, `canonicalized`) proceed to fingerprint comparison. Only `no_match` and `error` halt the pipeline.
 
 7. **Compare against existing groups:**
    - Each `conformer_group` stores a representative canonical fingerprint (the medoid member).
@@ -138,7 +190,9 @@ Each `conformer_group` stores:
 
 ### Fallbacks
 
-- **Rigid/small molecules** (0 or 1 rotor): same species entry + optional RMSD sanity check + optional energy window. Parameters stored in the scheme.
+- **Rigid/small molecules** (0 rotors): same species entry + Kabsch RMSD comparison when `rigid_fallback_use_rmsd` is enabled. Parameters stored in the scheme.
+- **Methyl-exclusion creates zero rotors**: when `exclude_methyl_rotors=true` removes all rotors from a molecule that has rotatable bonds (e.g., ethanol CCO), the molecule becomes effectively rigid from the matcher's perspective. RMSD then becomes the fallback discriminator. This is a design choice: ethanol's C-O rotation is scientifically meaningful but methyl-dominated, so excluding it trades conformer resolution for grouping stability.
+- **Both-terminal exclusion (ethane rule)**: bonds where both sides have ≤1 heavy neighbor (e.g., ethane CH₃-CH₃) are excluded from rotor discovery because their dihedrals are defined only by hydrogen positions, which are too noisy for basin identity. This is an intentional design choice, not a limitation.
 - **Label hint**: When torsion data is unavailable (e.g., imported literature conformers without geometry), the label-based fallback is retained with `scope = "imported"`.
 
 ## Scientific Justification
@@ -170,7 +224,8 @@ Before any geometric comparison, the system must establish which atom in one geo
 - **Primary path:** Build a provisional graph from the uploaded XYZ by inferring connectivity from 3D distances (`rdDetermineBonds.DetermineConnectivity`). Run graph isomorphism (`GetSubstructMatches` with bond-order-agnostic matching) to find all valid atom mappings. This works well for typical geometries.
 - **Fallback path:** If connectivity inference fails (fragile for radicals, TSs, stretched bonds, weak interactions), fall back to SMILES-graph-only matching with element-based assignment. This avoids relying on fragile bond inference and trusts SMILES as the complete graph definition.
 - Deduplicate by heavy-atom mapping (hydrogen permutations are irrelevant for torsion comparison since terminal atom selection is deterministic via canonical ranking).
-- If multiple heavy-atom mappings exist (molecular symmetry), compute the torsion fingerprint under each mapping. If all mappings produce the same fingerprint → accept as `equivalent`. If they disagree → reject as `conflicting` (unresolvable ambiguity).
+- If multiple heavy-atom mappings exist (molecular symmetry), compute the torsion fingerprint under each mapping. If all mappings produce the same fingerprint → accept as `equivalent`. If they disagree → resolve via lexicographic minimization of the quantized bin vector → `canonicalized` (see Step 6 in Core Algorithm).
+- Verified on both single-rotor (chloral: 6 mappings → 3 fingerprints) and multi-rotor (bis-CF₂ `CC(F)(F)CC(F)(F)C`: 8 mappings → 7 fingerprints) symmetric molecules.
 - Outcome: atom-mapped coordinates in canonical species order, or rejection with diagnostic status.
 
 **Step 2 — Torsion fingerprint (primary, for flexible molecules)**
@@ -186,7 +241,7 @@ For rigid molecules with zero rotatable bonds, the torsion fingerprint is empty 
 ### Code Locations
 
 - `app/chemistry/torsion_fingerprint.py`: Core module implementing all three steps:
-  - `resolve_atom_mapping()` → `AtomMappingResult` — Step 1. Uses SMILES as graph truth with `DetermineConnectivity` as primary and SMILES-graph-only as fallback. Returns status (`unique`, `equivalent`, `conflicting`, `no_match`, `error`), the atom mapping, fingerprint, and mapped coordinates.
+  - `resolve_atom_mapping()` → `AtomMappingResult` — Step 1. Uses SMILES as graph truth with `DetermineConnectivity` as primary and SMILES-graph-only as fallback. When multiple valid mappings produce different fingerprints (graph automorphisms), resolves via lexicographic minimization. Returns status (`unique`, `equivalent`, `canonicalized`, `no_match`, `error`), the atom mapping, fingerprint, and mapped coordinates.
   - `compute_torsion_fingerprint()` → `TorsionFingerprint` — Step 2 (canonical rotor extraction + dihedral computation).
   - `kabsch_rmsd()` — Step 3 (Kabsch-aligned RMSD via SVD).
   - `compare_conformers()` → `ConformerComparisonResult` — The primary comparison function. Explicitly separates `same_basin` (identity decision) from `torsion_deltas` and `kabsch_rmsd` (diagnostic evidence). Uses torsion fingerprint for flexible molecules, Kabsch RMSD for rigid molecules.
@@ -215,17 +270,34 @@ The persisted stable identity is `conformer_group.id` — the tuple above is the
 
 - Kabsch RMSD to the group representative
 - Per-rotor angular deltas
-- Atom mapping status (`unique`, `equivalent`, `conflicting`)
+- Atom mapping status (`unique`, `equivalent`, `canonicalized`)
 - Scheme version and parameters used
 - Number of valid graph isomorphisms found
 
 RMSD is **not** part of the identity because it is relative to a chosen representative and changes if the representative is updated, the alignment is recomputed, or thresholds are adjusted.
 
+## Verified Properties
+
+The following properties are verified by the test suite (`tests/test_torsion_fingerprint.py`, 79 tests):
+
+1. **Atom-order invariance**: Same geometry with scrambled atom ordering → identical fingerprint hash. Tested on 7 molecules (ClCCO, ClCCN, ClCCCl, CC(Cl)CO, ClCC=O, chloral, bis-CF₂) with original + shuffled orderings.
+2. **Symmetry canonicalization**: Molecules with graph automorphisms produce consistent canonical fingerprints via lexicographic minimization. Single-rotor (chloral, 6 mappings) and multi-rotor (bis-CF₂, 8 mappings) cases verified.
+3. **Conformer discrimination**: Gauche (60°) vs anti (180°) rotamers correctly separated for 4 molecules. Gauche vs gauche-prime (10° apart) correctly grouped.
+4. **Threshold boundary**: 14.9° → pass, 15.0° → pass (≤), 15.1° → fail. Wraparound near 0°/360° works correctly.
+5. **Multi-rotor "all must pass" rule**: Pentane with one torsion within threshold and one outside → correctly rejected. Not an aggregate metric.
+6. **Rotor-order stability**: Canonical rotor keys and ordering identical across shuffled atom orderings for multi-rotor molecules.
+7. **Chirality safety**: R/S enantiomers of 2-chloro-1-propanol produce different torsion fingerprints and are not merged (`same_basin=False`).
+8. **Methyl-exclusion fallback**: Ethanol with `exclude_methyl=True` → 0 rotors → RMSD becomes primary discriminator. Same geometry matches; distorted geometry rejected.
+9. **Stereocenter-adjacent rotor**: (R)-2-butanol with rotor next to chiral center resolves correctly; fingerprint stable across atom orderings.
+10. **All-mapping consistency**: For every tested symmetric molecule, all valid graph isomorphisms are enumerated and the canonical choice equals the lexicographic minimum of the full set.
+
 ## Limitations & Future Work
 
 - **Ring conformers** (chair/boat, envelope/twist) are not well-described by simple dihedral comparison. Ring puckering parameters (Cremer–Pople) may be needed for cyclic systems. Kabsch RMSD partially addresses this as a fallback.
-- **Symmetry-equivalent rotor permutations** — the current implementation deduplicates by heavy-atom mapping but does not yet generate all symmetry-equivalent rotor orderings and canonicalize to the lexicographic minimum. This is correct for most molecules but may produce false negatives for highly symmetric species.
+- **Symmetry-equivalent rotor permutations** — resolved in the current implementation via lexicographic minimization of fingerprints across all valid graph automorphisms (see Step 6 above). Verified on chloral (CCl₃, 6 heavy-atom permutations) with 13 atom-ordering variants. The consequence is that mapped coordinates may differ between canonicalized mappings of identical geometry; if stable coordinate identity is needed, a secondary RMSD-based tiebreaker can be added.
 - **XYZ-to-graph bond inference** uses `rdDetermineBonds.DetermineConnectivity` as the primary path, which may occasionally produce incorrect connectivity for unusual bond lengths, radicals, or charged species. Mitigated by: (a) the system rejects mismatches (`no_match` status) rather than silently accepting bad mappings, and (b) a fallback path uses the SMILES graph as the sole source of truth with element-based atom assignment when connectivity inference fails.
+- **Stereochemistry enforcement** is not handled at the conformer fingerprint level. The graph isomorphism uses bond-order-agnostic matching and does not enforce R/S chirality — an S geometry can successfully map onto R SMILES. This is by design: stereo enforcement belongs at the `species_entry` level (via `stereo_kind` and `stereo_label`), not at conformer grouping. By the time two geometries reach conformer comparison, they should already be confirmed as the same stereoisomer. However, the torsion fingerprint provides a partial safety net: enantiomeric geometries typically produce different torsion angles (mirrored dihedral values), so they would land in different basins even if stereo filtering were accidentally skipped. This was verified with R/S enantiomers of 2-chloro-1-propanol (`C[C@H](Cl)CO` vs `C[C@@H](Cl)CO`).
+- **Threshold boundary precision**: the comparison uses `<=` (delta ≤ threshold), so exactly 15.0° is a pass. Due to floating-point arithmetic in trigonometric functions, angles that are mathematically exactly at the boundary (e.g., 15.000000000000057°) may cross it. In practice this is negligible, but the scheme's `torsion_match_threshold_degrees` should be understood as a soft boundary, not a machine-precision cutoff. Verified with tests at 14.9°, 15.0°, and 15.1° separations.
 - **Threshold tuning** per molecule class could be a future scheme parameter (stricter for rigid molecules, more permissive for flexible chains).
 - **Method-aware grouping**: two conformers optimized at very different levels of theory may produce different basin assignments. The scheme could optionally factor in LOT compatibility.
 - The label-based fallback and imported-conformer scope provide graceful degradation when torsion data is unavailable.

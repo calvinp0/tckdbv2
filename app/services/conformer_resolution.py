@@ -74,7 +74,7 @@ def compute_fingerprint_for_observation(
             methyl_symmetry_fold=scheme_params.get("methyl_symmetry_fold", 3),
             bin_width_deg=scheme_params.get("quantization_bin_degrees", 15),
         )
-        if result.status in ("unique", "equivalent") and result.fingerprint is not None:
+        if result.status in ("unique", "equivalent", "canonicalized") and result.fingerprint is not None:
             return result.fingerprint, result.mapped_coords
         return None, None
     except (ValueError, RuntimeError):

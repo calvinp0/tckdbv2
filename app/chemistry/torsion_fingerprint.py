@@ -227,9 +227,12 @@ def identify_rotor_slots(
         if a1.GetAtomicNum() == 1 or a2.GetAtomicNum() == 1:
             continue
 
-        # Need at least one side with >1 heavy neighbor to define a
-        # meaningful torsion (otherwise both sides are terminal-heavy and
-        # the dihedral is defined only by hydrogen positions — too noisy).
+        # DESIGN CHOICE: Exclude bonds where both sides have ≤1 heavy
+        # neighbor (e.g., ethane CH3-CH3). These "both-terminal" rotors
+        # have dihedrals defined only by hydrogen positions, which are
+        # too noisy to be meaningful for conformer basin identity.
+        # This intentionally excludes ethane from conformer grouping.
+        # If this behavior is changed, update test_ethane_no_rotors.
         a1_heavy_neighbors = sum(
             1 for n in a1.GetNeighbors() if n.GetAtomicNum() != 1
         )
@@ -643,13 +646,35 @@ def resolve_atom_mapping(
                 fingerprint=fingerprints[0],
                 mapped_coords=chosen_mapped_coords,
             )
-        else:
-            return AtomMappingResult(
-                status="conflicting",
-                mapping=None,
-                n_mappings=len(unique_matches),
-                fingerprint=None,
-            )
+
+        # Symmetry-induced conflicts: multiple valid mappings produce
+        # different fingerprints (e.g., CCl3 3-fold symmetry). Resolve
+        # by picking the lexicographically minimal fingerprint — this
+        # canonicalizes the symmetric permutations.
+        min_idx = 0
+        min_bins = fingerprints[0].quantized_bins
+        for i, fp in enumerate(fingerprints[1:], 1):
+            if fp.quantized_bins < min_bins:
+                min_bins = fp.quantized_bins
+                min_idx = i
+
+        # Reconstruct the mapping and coords for the chosen canonical form
+        canonical_match = unique_matches[min_idx]
+        canonical_conf = Chem.Conformer(ref_mol.GetNumAtoms())
+        canonical_coords: list[tuple[float, float, float]] = [(0.0, 0.0, 0.0)] * ref_mol.GetNumAtoms()
+        for xyz_idx in range(len(xyz_atoms)):
+            ref_idx = canonical_match[xyz_idx]
+            _, x, y, z = xyz_atoms[xyz_idx]
+            canonical_conf.SetAtomPosition(ref_idx, (x, y, z))
+            canonical_coords[ref_idx] = (x, y, z)
+
+        return AtomMappingResult(
+            status="canonicalized",
+            mapping={xi: canonical_match[xi] for xi in range(len(xyz_atoms))},
+            n_mappings=len(unique_matches),
+            fingerprint=fingerprints[min_idx],
+            mapped_coords=canonical_coords,
+        )
 
     except Exception:
         return AtomMappingResult(status="error")
@@ -689,15 +714,8 @@ def compute_fingerprint_from_xyz(
         bin_width_deg=bin_width_deg,
     )
 
-    if result.status in ("unique", "equivalent") and result.fingerprint is not None:
+    if result.status in ("unique", "equivalent", "canonicalized") and result.fingerprint is not None:
         return result.fingerprint
-
-    if result.status == "conflicting":
-        raise ValueError(
-            f"Atom mapping ambiguity: {result.n_mappings} distinct heavy-atom "
-            f"mappings produce different torsion fingerprints. "
-            f"Cannot auto-assign conformer group."
-        )
 
     if result.status == "no_match":
         raise ValueError(
