@@ -78,6 +78,7 @@ def upgrade() -> None:
     sa.Column('method', sa.Text(), nullable=False),
     sa.Column('basis', sa.Text(), nullable=True),
     sa.Column('aux_basis', sa.Text(), nullable=True),
+    sa.Column('cabs_basis', sa.Text(), nullable=True),
     sa.Column('dispersion', sa.Text(), nullable=True),
     sa.Column('solvent', sa.Text(), nullable=True),
     sa.Column('solvent_model', sa.Text(), nullable=True),
@@ -86,6 +87,17 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_level_of_theory')),
     sa.UniqueConstraint('lot_hash', name=op.f('uq_level_of_theory_lot_hash'))
+    )
+    op.create_table('calculation_parameter_vocab',
+    sa.Column('canonical_key', sa.Text(), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('expected_value_type', sa.Text(), nullable=True),
+    sa.Column('affects_scientific_result', sa.Boolean(), nullable=True),
+    sa.Column('affects_numerics', sa.Boolean(), nullable=True),
+    sa.Column('affects_resources', sa.Boolean(), nullable=True),
+    sa.Column('note', sa.Text(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.PrimaryKeyConstraint('canonical_key', name=op.f('pk_calculation_parameter_vocab'))
     )
     op.create_table('literature',
     sa.Column('id', sa.BigInteger(), nullable=False),
@@ -661,6 +673,9 @@ def upgrade() -> None:
     sa.Column('lot_id', sa.BigInteger(), nullable=True),
     sa.Column('literature_id', sa.BigInteger(), nullable=True),
     sa.Column('conformer_observation_id', sa.BigInteger(), nullable=True),
+    sa.Column('parameters_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('parameters_parser_version', sa.Text(), nullable=True),
+    sa.Column('parameters_extracted_at', sa.DateTime(), nullable=True),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.Column('created_by', sa.BigInteger(), nullable=True),
     sa.CheckConstraint('\n                (\n                    transition_state_entry_id IS NOT NULL\n                    AND species_entry_id IS NULL\n                )\n                OR\n                (\n                    transition_state_entry_id IS NULL\n                    AND species_entry_id IS NOT NULL\n                )\n                ', name=op.f('ck_calculation_one_owner')),
@@ -794,6 +809,24 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['calculation_id'], ['calculation.id'], name=op.f('fk_calc_sp_result_calculation_id_calculation'), initially='IMMEDIATE', deferrable=True),
     sa.PrimaryKeyConstraint('calculation_id', name=op.f('pk_calc_sp_result'))
     )
+    op.create_table('calc_geometry_validation',
+    sa.Column('calculation_id', sa.BigInteger(), nullable=False),
+    sa.Column('input_geometry_id', sa.BigInteger(), nullable=True),
+    sa.Column('output_geometry_id', sa.BigInteger(), nullable=True),
+    sa.Column('species_smiles', sa.Text(), nullable=False),
+    sa.Column('is_isomorphic', sa.Boolean(), nullable=False),
+    sa.Column('rmsd', sa.Float(), nullable=True),
+    sa.Column('atom_mapping', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('n_mappings', sa.Integer(), nullable=True),
+    sa.Column('validation_status', sa.Enum('passed', 'warning', 'fail', name='validation_status'), nullable=False),
+    sa.Column('validation_reason', sa.Text(), nullable=True),
+    sa.Column('rmsd_warning_threshold', sa.Float(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['calculation_id'], ['calculation.id'], name=op.f('fk_calc_geometry_validation_calculation_id_calculation'), initially='IMMEDIATE', deferrable=True),
+    sa.ForeignKeyConstraint(['input_geometry_id'], ['geometry.id'], name=op.f('fk_calc_geometry_validation_input_geometry_id_geometry'), initially='IMMEDIATE', deferrable=True),
+    sa.ForeignKeyConstraint(['output_geometry_id'], ['geometry.id'], name=op.f('fk_calc_geometry_validation_output_geometry_id_geometry'), initially='IMMEDIATE', deferrable=True),
+    sa.PrimaryKeyConstraint('calculation_id', name=op.f('pk_calc_geometry_validation'))
+    )
     op.create_table('calculation_artifact',
     sa.Column('id', sa.BigInteger(), nullable=False),
     sa.Column('calculation_id', sa.BigInteger(), nullable=False),
@@ -805,6 +838,27 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['calculation_id'], ['calculation.id'], name=op.f('fk_calculation_artifact_calculation_id_calculation'), initially='IMMEDIATE', deferrable=True),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_calculation_artifact'))
     )
+    op.create_table('calculation_parameter',
+    sa.Column('id', sa.BigInteger(), nullable=False),
+    sa.Column('calculation_id', sa.BigInteger(), nullable=False),
+    sa.Column('raw_key', sa.Text(), nullable=False),
+    sa.Column('canonical_key', sa.Text(), nullable=True),
+    sa.Column('raw_value', sa.Text(), nullable=False),
+    sa.Column('canonical_value', sa.Text(), nullable=True),
+    sa.Column('section', sa.Text(), nullable=True),
+    sa.Column('value_type', sa.Text(), nullable=True),
+    sa.Column('unit', sa.Text(), nullable=True),
+    sa.Column('parameter_index', sa.Integer(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint('parameter_index IS NULL OR parameter_index >= 0', name=op.f('ck_calculation_parameter_parameter_index_ge_0')),
+    sa.ForeignKeyConstraint(['calculation_id'], ['calculation.id'], name=op.f('fk_calculation_parameter_calculation_id_calculation'), initially='IMMEDIATE', deferrable=True),
+    sa.ForeignKeyConstraint(['canonical_key'], ['calculation_parameter_vocab.canonical_key'], name=op.f('fk_calculation_parameter_canonical_key_calculation_parameter_vocab'), initially='IMMEDIATE', deferrable=True),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_calculation_parameter'))
+    )
+    op.create_index('ix_calculation_parameter_calculation_id', 'calculation_parameter', ['calculation_id'], unique=False)
+    op.create_index('ix_calculation_parameter_canonical_key', 'calculation_parameter', ['canonical_key'], unique=False)
+    op.create_index('ix_calculation_parameter_raw_key_section', 'calculation_parameter', ['raw_key', 'section'], unique=False)
+    op.create_index('ix_calculation_parameter_canonical_key_value', 'calculation_parameter', ['canonical_key', 'canonical_value'], unique=False)
     op.create_table('calculation_dependency',
     sa.Column('parent_calculation_id', sa.BigInteger(), nullable=False),
     sa.Column('child_calculation_id', sa.BigInteger(), nullable=False),
@@ -1069,6 +1123,14 @@ def downgrade() -> None:
     op.drop_index('uq_calculation_dependency_child_calculation_id_freq_on', table_name='calculation_dependency', postgresql_where=sa.text("dependency_role = 'freq_on'"))
     op.drop_table('calculation_dependency')
     op.drop_table('calculation_artifact')
+    op.drop_index('ix_calculation_parameter_canonical_key_value', table_name='calculation_parameter')
+    op.drop_index('ix_calculation_parameter_raw_key_section', table_name='calculation_parameter')
+    op.drop_index('ix_calculation_parameter_canonical_key', table_name='calculation_parameter')
+    op.drop_index('ix_calculation_parameter_calculation_id', table_name='calculation_parameter')
+    op.drop_table('calculation_parameter')
+    op.drop_table('calculation_parameter_vocab')
+    op.drop_table('calc_geometry_validation')
+    op.execute("DROP TYPE IF EXISTS validation_status")
     op.drop_table('calc_sp_result')
     op.drop_table('calc_scan_result')
     op.drop_table('calc_scan_point')

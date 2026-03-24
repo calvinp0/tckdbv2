@@ -9,6 +9,7 @@ class LevelOfTheoryBase(BaseModel):
     method: str = Field(min_length=1)
     basis: str | None = None
     aux_basis: str | None = None
+    cabs_basis: str | None = None
     dispersion: str | None = None
     solvent: str | None = None
     solvent_model: str | None = None
@@ -27,6 +28,7 @@ class LevelOfTheoryUpdate(SchemaBase):
     method: str | None = Field(default=None, min_length=1)
     basis: str | None = None
     aux_basis: str | None = None
+    cabs_basis: str | None = None
     dispersion: str | None = None
     solvent: str | None = None
     solvent_model: str | None = None

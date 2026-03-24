@@ -59,6 +59,7 @@ class LevelOfTheoryRef(SchemaBase):
     method: str = Field(min_length=1)
     basis: str | None = None
     aux_basis: str | None = None
+    cabs_basis: str | None = None
     dispersion: str | None = None
     solvent: str | None = None
     solvent_model: str | None = None
@@ -73,6 +74,7 @@ class LevelOfTheoryRef(SchemaBase):
     def normalize_optional_fields(self) -> Self:
         self.basis = normalize_optional_text(self.basis)
         self.aux_basis = normalize_optional_text(self.aux_basis)
+        self.cabs_basis = normalize_optional_text(self.cabs_basis)
         self.dispersion = normalize_optional_text(self.dispersion)
         self.solvent = normalize_optional_text(self.solvent)
         self.solvent_model = normalize_optional_text(self.solvent_model)

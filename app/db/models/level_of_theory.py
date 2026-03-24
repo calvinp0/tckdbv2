@@ -21,6 +21,7 @@ class LevelOfTheory(Base, TimestampMixin):
     method: Mapped[str] = mapped_column(Text, nullable=False)
     basis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     aux_basis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cabs_basis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     dispersion: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     solvent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     solvent_model: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

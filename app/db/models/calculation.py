@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
     CHAR,
     BigInteger,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -17,6 +19,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, CreatedByMixin, TimestampMixin
@@ -27,6 +30,7 @@ from app.db.models.common import (
     CalculationQuality,
     CalculationType,
     ScanConstraintKind,
+    ValidationStatus,
 )
 
 if TYPE_CHECKING:
@@ -91,6 +95,16 @@ class Calculation(Base, TimestampMixin, CreatedByMixin):
             "conformer_observation.id", deferrable=True, initially="IMMEDIATE"
         ),
         nullable=True,
+    )
+
+    parameters_json: Mapped[Optional[dict]] = mapped_column(
+        JSONB, nullable=True, doc="Parsed parameter snapshot from ESS input/output"
+    )
+    parameters_parser_version: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, doc="Version tag of the parser that extracted parameters"
+    )
+    parameters_extracted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=False), nullable=True, doc="When parameters were extracted"
     )
 
     species_entry: Mapped[Optional["SpeciesEntry"]] = relationship(
@@ -170,6 +184,15 @@ class Calculation(Base, TimestampMixin, CreatedByMixin):
     artifacts: Mapped[list["CalculationArtifact"]] = relationship(
         back_populates="calculation",
         cascade="all, delete-orphan",
+    )
+    parameters: Mapped[list["CalculationParameter"]] = relationship(
+        back_populates="calculation",
+        cascade="all, delete-orphan",
+    )
+    geometry_validation: Mapped[Optional["CalculationGeometryValidation"]] = relationship(
+        back_populates="calculation",
+        cascade="all, delete-orphan",
+        uselist=False,
     )
 
     __table_args__ = (
@@ -604,3 +627,150 @@ class CalculationArtifact(Base, TimestampMixin):
     bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
 
     calculation: Mapped["Calculation"] = relationship(back_populates="artifacts")
+
+
+class CalculationParameterVocab(Base, TimestampMixin):
+    """Ontology seed for canonical parameter keys.
+
+    Keyed by canonical_key (not a surrogate ID) — the key itself is the
+    stable semantic handle.  Classification flags enable filtering: e.g.
+    ``affects_scientific_result = true`` selects only parameters that matter
+    for "same setup" comparisons.
+    """
+
+    __tablename__ = "calculation_parameter_vocab"
+
+    canonical_key: Mapped[str] = mapped_column(Text, primary_key=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    expected_value_type: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, doc="Expected type: bool, int, float, string, enum"
+    )
+    affects_scientific_result: Mapped[Optional[bool]] = mapped_column(
+        nullable=True,
+        doc="Can materially affect the scientific result or comparability",
+    )
+    affects_numerics: Mapped[Optional[bool]] = mapped_column(
+        nullable=True,
+        doc="Affects numerical precision / convergence behaviour",
+    )
+    affects_resources: Mapped[Optional[bool]] = mapped_column(
+        nullable=True,
+        doc="Operational / resource / bookkeeping only",
+    )
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    parameters: Mapped[list["CalculationParameter"]] = relationship(
+        back_populates="vocab",
+    )
+
+
+class CalculationParameter(Base, TimestampMixin):
+    """EAV-style parsed parameter from an ESS calculation.
+
+    Stores both raw (software-specific) and canonical (normalized) key/value
+    pairs.  Software identity is derived via calculation → software_release → software,
+    not duplicated here.
+    """
+
+    __tablename__ = "calculation_parameter"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+
+    calculation_id: Mapped[int] = mapped_column(
+        ForeignKey("calculation.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=False,
+    )
+
+    raw_key: Mapped[str] = mapped_column(Text, nullable=False)
+    canonical_key: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "calculation_parameter_vocab.canonical_key",
+            deferrable=True,
+            initially="IMMEDIATE",
+        ),
+        nullable=True,
+    )
+    raw_value: Mapped[str] = mapped_column(Text, nullable=False)
+    canonical_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    section: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, doc="Route-line section: opt, scf, integral, grid, resource"
+    )
+    value_type: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, doc="Hint for consumers: bool, int, float, string, enum"
+    )
+    unit: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    parameter_index: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, doc="Ordering for repeated/positional options"
+    )
+
+    calculation: Mapped["Calculation"] = relationship(back_populates="parameters")
+    vocab: Mapped[Optional["CalculationParameterVocab"]] = relationship(
+        back_populates="parameters",
+    )
+
+    __table_args__ = (
+        Index("ix_calculation_parameter_calculation_id", "calculation_id"),
+        Index("ix_calculation_parameter_canonical_key", "canonical_key"),
+        Index(
+            "ix_calculation_parameter_raw_key_section",
+            "raw_key",
+            "section",
+        ),
+        Index(
+            "ix_calculation_parameter_canonical_key_value",
+            "canonical_key",
+            "canonical_value",
+        ),
+        CheckConstraint(
+            "parameter_index IS NULL OR parameter_index >= 0",
+            name="parameter_index_ge_0",
+        ),
+    )
+
+
+class CalculationGeometryValidation(Base, TimestampMixin):
+    """Result of validating a calculation's output geometry against species identity.
+
+    Stores graph isomorphism check, Kabsch-aligned RMSD, and the policy decision.
+    One row per calculation (PK = calculation_id).
+    """
+
+    __tablename__ = "calc_geometry_validation"
+
+    calculation_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("calculation.id", deferrable=True, initially="IMMEDIATE"),
+        primary_key=True,
+    )
+    input_geometry_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("geometry.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=True,
+    )
+    output_geometry_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("geometry.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=True,
+    )
+    species_smiles: Mapped[str] = mapped_column(Text, nullable=False)
+    is_isomorphic: Mapped[bool] = mapped_column(nullable=False)
+    rmsd: Mapped[Optional[float]] = mapped_column(nullable=True)
+    atom_mapping: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    n_mappings: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    validation_status: Mapped[ValidationStatus] = mapped_column(
+        SAEnum(ValidationStatus, name="validation_status"),
+        nullable=False,
+    )
+    validation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    rmsd_warning_threshold: Mapped[Optional[float]] = mapped_column(nullable=True)
+
+    calculation: Mapped["Calculation"] = relationship(
+        back_populates="geometry_validation"
+    )
+    input_geometry: Mapped[Optional["Geometry"]] = relationship(
+        foreign_keys=[input_geometry_id],
+    )
+    output_geometry: Mapped[Optional["Geometry"]] = relationship(
+        foreign_keys=[output_geometry_id],
+    )

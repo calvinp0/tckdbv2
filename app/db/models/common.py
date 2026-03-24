@@ -117,6 +117,12 @@ class CalculationDependencyRole(str, Enum):
     neb_parent = "neb_parent"
 
 
+class ValidationStatus(str, Enum):
+    passed = "passed"
+    warning = "warning"
+    fail = "fail"
+
+
 class ScanConstraintKind(str, Enum):
     bond = "bond"
     angle = "angle"
