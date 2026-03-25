@@ -17,3 +17,5 @@
 | 0013 | [Generalized Constraint Table](0013-generalized-constraint-table.md) | 2026-03-25 | Accepted |
 | 0014 | [NEB Image Result Design](0014-neb-image-result-design.md) | 2026-03-25 | Accepted |
 | 0015 | [Unified IRC Storage Model](0015-unified-irc-storage-model.md) | 2026-03-25 | Accepted |
+| 0016 | [Chemistry-First Lookup API](0016-chemistry-first-lookup-api.md) | 2026-03-26 | Accepted |
+| 0017 | [Calculation Artifact Storage Architecture](0017-artifact-storage-architecture.md) | 2026-03-26 | Accepted |

@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from app.api.routes import (
     health,
     kinetics,
+    lookup,
     reactions,
     species,
     thermo,
@@ -16,6 +17,7 @@ from app.api.routes import (
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
+api_router.include_router(lookup.router, prefix="/lookup", tags=["lookup"])
 api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])
 api_router.include_router(species.router, prefix="/species", tags=["species"])
 api_router.include_router(
