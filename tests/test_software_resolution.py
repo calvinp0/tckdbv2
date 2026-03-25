@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models.software import Software, SoftwareRelease
-from app.schemas.refs import SoftwareReleaseRef
+from app.schemas.fragments.refs import SoftwareReleaseRef
 from app.services.software_resolution import resolve_software_release_ref
 
 

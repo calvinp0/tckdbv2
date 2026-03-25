@@ -42,7 +42,7 @@ from app.services.reaction_resolution import (
     resolve_chem_reaction,
 )
 from app.services.species_resolution import resolve_species_entry
-from app.schemas.geometry import GeometryPayload
+from app.schemas.fragments.geometry import GeometryPayload
 from app.schemas.workflows.kinetics_upload import (
     KineticsReactionParticipantUpload,
     KineticsReactionUpload,

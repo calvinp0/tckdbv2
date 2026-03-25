@@ -544,9 +544,10 @@ def test_scan_result_tables_enforce_basic_constraints(db_conn) -> None:
     db_conn.execute(
         text("""
             INSERT INTO calc_scan_coordinate (
-                calculation_id, coordinate_index, atom1_index, atom2_index, atom3_index, atom4_index
+                calculation_id, coordinate_index, coordinate_kind,
+                atom1_index, atom2_index, atom3_index, atom4_index
             )
-            VALUES (:calculation_id, 1, 1, 2, 3, 4)
+            VALUES (:calculation_id, 1, 'dihedral', 1, 2, 3, 4)
             """),
         {"calculation_id": calculation_id},
     )
@@ -572,7 +573,7 @@ def test_scan_result_tables_enforce_basic_constraints(db_conn) -> None:
         db_conn,
         """
         INSERT INTO calc_scan_point_coordinate_value (
-            calculation_id, point_index, coordinate_index, angle_degrees
+            calculation_id, point_index, coordinate_index, coordinate_value
         )
         VALUES (:calculation_id, 2, 1, 45.0)
         """,

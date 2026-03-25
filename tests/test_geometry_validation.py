@@ -28,9 +28,9 @@ from app.services.geometry_validation import (
 # ---------------------------------------------------------------------------
 
 TESTS_DIR = os.path.dirname(__file__)
-OPT_LOG = os.path.join(TESTS_DIR, "opt.log")
-FREQ_LOG = os.path.join(TESTS_DIR, "freq.log")
-TS_LOG = os.path.join(TESTS_DIR, "opt_ts.log")
+OPT_LOG = os.path.join(TESTS_DIR, "opt_g09.log")
+FREQ_LOG = os.path.join(TESTS_DIR, "freq_g09.log")
+TS_LOG = os.path.join(TESTS_DIR, "ts_opt_g09.log")
 
 # SMILES for the species in opt.log / freq.log: N2C3H7 doublet radical
 SPECIES_SMILES = "[N]=NCCC"

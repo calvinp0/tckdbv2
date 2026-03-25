@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.schemas.geometry import GeometryPayload
+from app.schemas.fragments.geometry import GeometryPayload
 
 
 @dataclass(frozen=True)

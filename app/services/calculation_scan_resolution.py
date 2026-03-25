@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 import app.db.models  # noqa: F401
 from app.db.models.calculation import (
     Calculation,
-    CalculationScanConstraint,
+    CalculationConstraint,
     CalculationScanCoordinate,
     CalculationScanPoint,
     CalculationScanPointCoordinateValue,
@@ -48,10 +48,16 @@ def persist_calculation_scan(
             CalculationScanCoordinate(
                 calculation_id=calculation_id,
                 coordinate_index=coordinate.coordinate_index,
+                coordinate_kind=coordinate.coordinate_kind,
                 atom1_index=coordinate.atom1_index,
                 atom2_index=coordinate.atom2_index,
                 atom3_index=coordinate.atom3_index,
                 atom4_index=coordinate.atom4_index,
+                step_count=coordinate.step_count,
+                step_size=coordinate.step_size,
+                start_value=coordinate.start_value,
+                end_value=coordinate.end_value,
+                value_unit=coordinate.value_unit,
                 resolution_degrees=coordinate.resolution_degrees,
                 symmetry_number=coordinate.symmetry_number,
             )
@@ -59,7 +65,7 @@ def persist_calculation_scan(
 
     for constraint in payload.constraints:
         session.add(
-            CalculationScanConstraint(
+            CalculationConstraint(
                 calculation_id=calculation_id,
                 constraint_index=constraint.constraint_index,
                 constraint_kind=constraint.constraint_kind,
@@ -88,7 +94,8 @@ def persist_calculation_scan(
                     calculation_id=calculation_id,
                     point_index=point.point_index,
                     coordinate_index=coordinate_value.coordinate_index,
-                    angle_degrees=coordinate_value.angle_degrees,
+                    coordinate_value=coordinate_value.coordinate_value,
+                    value_unit=coordinate_value.value_unit,
                 )
             )
 

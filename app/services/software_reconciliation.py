@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from app.schemas.refs import SoftwareReleaseRef
+from app.schemas.fragments.refs import SoftwareReleaseRef
 
 
 @dataclass

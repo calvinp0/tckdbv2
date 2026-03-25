@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.chemistry.geometry import parse_xyz
 from app.db.models.geometry import Geometry, GeometryAtom
 from app.schemas.entities.geometry import GeometryAtomBase, GeometryCreate
-from app.schemas.geometry import GeometryPayload
+from app.schemas.fragments.geometry import GeometryPayload
 
 
 def geometry_create_from_payload(payload: GeometryPayload) -> GeometryCreate:

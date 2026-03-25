@@ -219,8 +219,10 @@ CLAUDE.md
 
 ARCHITECTURE.md
 
-backup_tckdb_dev_2026-03-20.sql
+backup_*.sql
 
 clean_run_log.md
 
 presentations/
+
+tests/ORCA_Examples/

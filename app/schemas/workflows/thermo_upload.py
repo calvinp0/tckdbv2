@@ -13,12 +13,12 @@ from app.db.models.common import ScientificOriginKind
 from app.schemas.common import SchemaBase
 from app.schemas.entities.thermo import ThermoNASACreate, ThermoPointCreate
 from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
-from app.schemas.refs import SoftwareReleaseRef, WorkflowToolReleaseRef
+from app.schemas.fragments.refs import SoftwareReleaseRef, WorkflowToolReleaseRef
 from app.schemas.utils import normalize_optional_text
 from app.schemas.workflows.energy_correction_upload import (
     AppliedEnergyCorrectionUploadPayload,
 )
-from app.schemas.workflows.literature_submission import LiteratureSubmissionRequest
+from app.schemas.workflows.literature_upload import LiteratureUploadRequest
 
 
 class ThermoUploadRequest(SchemaBase):
@@ -33,7 +33,7 @@ class ThermoUploadRequest(SchemaBase):
 
     scientific_origin: ScientificOriginKind = ScientificOriginKind.computed
 
-    literature: LiteratureSubmissionRequest | None = None
+    literature: LiteratureUploadRequest | None = None
     software_release: SoftwareReleaseRef | None = None
     workflow_tool_release: WorkflowToolReleaseRef | None = None
 

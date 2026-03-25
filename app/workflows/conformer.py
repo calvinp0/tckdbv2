@@ -7,7 +7,7 @@ from app.chemistry.geometry import parse_xyz
 from app.db.models.calculation import CalculationOutputGeometry
 from app.db.models.common import CalculationGeometryRole
 from app.db.models.species import ConformerObservation
-from app.schemas.geometry import GeometryPayload
+from app.schemas.fragments.geometry import GeometryPayload
 from app.schemas.workflows.conformer_upload import ConformerUploadRequest
 from app.services.calculation_resolution import (
     persist_additional_calculations,

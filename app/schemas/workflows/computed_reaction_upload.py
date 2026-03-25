@@ -28,13 +28,13 @@ from app.schemas.common import SchemaBase
 from app.schemas.entities.thermo import ThermoNASACreate, ThermoPointCreate
 from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
 from app.schemas.reaction_family import find_canonical_reaction_family
-from app.schemas.refs import (
+from app.schemas.fragments.refs import (
     LevelOfTheoryRef,
     SoftwareReleaseRef,
     WorkflowToolReleaseRef,
 )
 from app.schemas.utils import normalize_optional_text
-from app.schemas.workflows.literature_submission import LiteratureSubmissionRequest
+from app.schemas.workflows.literature_upload import LiteratureUploadRequest
 
 # Reuse the PDep upload building blocks for calculations and geometries
 from app.schemas.workflows.network_pdep_upload import (
@@ -271,7 +271,7 @@ class ComputedReactionUploadRequest(SchemaBase):
     """
 
     # Provenance (shared across the bundle)
-    literature: LiteratureSubmissionRequest | None = None
+    literature: LiteratureUploadRequest | None = None
     software_release: SoftwareReleaseRef | None = None
     workflow_tool_release: WorkflowToolReleaseRef | None = None
 

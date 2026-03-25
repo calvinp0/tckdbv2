@@ -16,7 +16,7 @@ from app.db.models.common import CalculationType
 from app.schemas.common import SchemaBase
 from app.schemas.fragments.calculation import CalculationWithResultsPayload
 from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
-from app.schemas.geometry import GeometryPayload
+from app.schemas.fragments.geometry import GeometryPayload
 from app.schemas.reaction_family import find_canonical_reaction_family
 from app.schemas.utils import normalize_optional_text
 

@@ -46,7 +46,7 @@ from app.services.conformer_resolution import resolve_conformer_group
 from app.services.geometry_resolution import resolve_geometry_payload
 from app.services.species_resolution import resolve_species_entry
 from app.schemas.fragments.calculation import CalculationCreateRequest
-from app.schemas.geometry import GeometryPayload
+from app.schemas.fragments.geometry import GeometryPayload
 from app.schemas.workflows.network_pdep_upload import (
     CalculationIn,
     NetworkPDepUploadRequest,

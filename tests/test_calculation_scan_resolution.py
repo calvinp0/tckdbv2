@@ -61,6 +61,7 @@ def test_persist_calculation_scan_persists_nested_scan_rows(db_engine) -> None:
                     coordinates=[
                         {
                             "coordinate_index": 1,
+                            "coordinate_kind": "dihedral",
                             "atom1_index": 1,
                             "atom2_index": 2,
                             "atom3_index": 3,
@@ -85,7 +86,7 @@ def test_persist_calculation_scan_persists_nested_scan_rows(db_engine) -> None:
                             "coordinate_values": [
                                 {
                                     "coordinate_index": 1,
-                                    "angle_degrees": 60.0,
+                                    "coordinate_value": 60.0,
                                 }
                             ],
                         }
@@ -101,9 +102,9 @@ def test_persist_calculation_scan_persists_nested_scan_rows(db_engine) -> None:
             assert stored is not None
             assert stored.dimension == 1
             assert len(stored.calculation.scan_coordinates) == 1
-            assert len(stored.calculation.scan_constraints) == 1
+            assert len(stored.calculation.constraints) == 1
             assert (
-                stored.calculation.scan_constraints[0].constraint_kind.value == "bond"
+                stored.calculation.constraints[0].constraint_kind.value == "bond"
             )
             assert len(stored.calculation.scan_points) == 1
             assert len(stored.calculation.scan_points[0].coordinate_values) == 1
@@ -119,6 +120,7 @@ def test_calculation_scan_create_rejects_unknown_coordinate_reference() -> None:
             coordinates=[
                 {
                     "coordinate_index": 1,
+                    "coordinate_kind": "dihedral",
                     "atom1_index": 1,
                     "atom2_index": 2,
                     "atom3_index": 3,
@@ -131,7 +133,7 @@ def test_calculation_scan_create_rejects_unknown_coordinate_reference() -> None:
                     "coordinate_values": [
                         {
                             "coordinate_index": 2,
-                            "angle_degrees": 60.0,
+                            "coordinate_value": 60.0,
                         }
                     ],
                 }

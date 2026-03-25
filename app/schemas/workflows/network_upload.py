@@ -5,10 +5,10 @@ from pydantic import Field, model_validator
 from app.db.models.common import NetworkSpeciesRole
 from app.schemas.common import SchemaBase
 from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
-from app.schemas.refs import SoftwareReleaseRef, WorkflowToolReleaseRef
+from app.schemas.fragments.refs import SoftwareReleaseRef, WorkflowToolReleaseRef
 from app.schemas.utils import normalize_optional_text
 from app.schemas.workflows.kinetics_upload import KineticsReactionUpload
-from app.schemas.workflows.literature_submission import LiteratureSubmissionRequest
+from app.schemas.workflows.literature_upload import LiteratureUploadRequest
 
 
 class NetworkUploadSpeciesLinkPayload(SchemaBase):
@@ -49,7 +49,7 @@ class NetworkUploadRequest(SchemaBase):
     name: str | None = None
     description: str | None = None
 
-    literature: LiteratureSubmissionRequest | None = None
+    literature: LiteratureUploadRequest | None = None
     software_release: SoftwareReleaseRef | None = None
     workflow_tool_release: WorkflowToolReleaseRef | None = None
 

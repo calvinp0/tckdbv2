@@ -29,7 +29,9 @@ from app.db.models.common import (
     CalculationGeometryRole,
     CalculationQuality,
     CalculationType,
-    ScanConstraintKind,
+    ConstraintKind,
+    IRCDirection,
+    ScanCoordinateKind,
     ValidationStatus,
 )
 
@@ -171,15 +173,30 @@ class Calculation(Base, TimestampMixin, CreatedByMixin):
         cascade="all, delete-orphan",
         order_by="CalculationScanCoordinate.coordinate_index",
     )
-    scan_constraints: Mapped[list["CalculationScanConstraint"]] = relationship(
+    constraints: Mapped[list["CalculationConstraint"]] = relationship(
         back_populates="calculation",
         cascade="all, delete-orphan",
-        order_by="CalculationScanConstraint.constraint_index",
+        order_by="CalculationConstraint.constraint_index",
     )
     scan_points: Mapped[list["CalculationScanPoint"]] = relationship(
         back_populates="calculation",
         cascade="all, delete-orphan",
         order_by="CalculationScanPoint.point_index",
+    )
+    irc_result: Mapped[Optional["CalculationIRCResult"]] = relationship(
+        back_populates="calculation",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    irc_points: Mapped[list["CalculationIRCPoint"]] = relationship(
+        back_populates="calculation",
+        cascade="all, delete-orphan",
+        order_by="CalculationIRCPoint.point_index",
+    )
+    neb_images: Mapped[list["CalculationNEBImageResult"]] = relationship(
+        back_populates="calculation",
+        cascade="all, delete-orphan",
+        order_by="CalculationNEBImageResult.image_index",
     )
     artifacts: Mapped[list["CalculationArtifact"]] = relationship(
         back_populates="calculation",
@@ -421,13 +438,13 @@ class CalculationScanResult(Base):
         viewonly=True,
         order_by="CalculationScanCoordinate.coordinate_index",
     )
-    constraints: Mapped[list["CalculationScanConstraint"]] = relationship(
+    constraints: Mapped[list["CalculationConstraint"]] = relationship(
         primaryjoin=(
             "CalculationScanResult.calculation_id == "
-            "foreign(CalculationScanConstraint.calculation_id)"
+            "foreign(CalculationConstraint.calculation_id)"
         ),
         viewonly=True,
-        order_by="CalculationScanConstraint.constraint_index",
+        order_by="CalculationConstraint.constraint_index",
     )
     points: Mapped[list["CalculationScanPoint"]] = relationship(
         primaryjoin=(
@@ -442,7 +459,13 @@ class CalculationScanResult(Base):
 
 
 class CalculationScanCoordinate(Base):
-    """Definition of one scanned internal coordinate."""
+    """Definition of one scanned internal coordinate.
+
+    Supports variable-arity coordinates: bond (2 atoms), angle (3),
+    dihedral/improper (4).  ``atom3_index`` and ``atom4_index`` are
+    nullable; check constraints enforce correct arity per
+    ``coordinate_kind``.
+    """
 
     __tablename__ = "calc_scan_coordinate"
 
@@ -453,11 +476,20 @@ class CalculationScanCoordinate(Base):
     )
     coordinate_index: Mapped[int] = mapped_column(Integer, primary_key=True)
 
+    coordinate_kind: Mapped[ScanCoordinateKind] = mapped_column(
+        SAEnum(ScanCoordinateKind, name="scan_coordinate_kind"),
+        nullable=False,
+    )
     atom1_index: Mapped[int] = mapped_column(Integer, nullable=False)
     atom2_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    atom3_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    atom4_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    atom3_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    atom4_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
+    step_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    step_size: Mapped[Optional[float]] = mapped_column(nullable=True)
+    start_value: Mapped[Optional[float]] = mapped_column(nullable=True)
+    end_value: Mapped[Optional[float]] = mapped_column(nullable=True)
+    value_unit: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     resolution_degrees: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     symmetry_number: Mapped[Optional[int]] = mapped_column(SmallInteger, nullable=True)
 
@@ -474,8 +506,29 @@ class CalculationScanCoordinate(Base):
         CheckConstraint("coordinate_index >= 1", name="coordinate_index_ge_1"),
         CheckConstraint("atom1_index >= 1", name="atom1_index_ge_1"),
         CheckConstraint("atom2_index >= 1", name="atom2_index_ge_1"),
-        CheckConstraint("atom3_index >= 1", name="atom3_index_ge_1"),
-        CheckConstraint("atom4_index >= 1", name="atom4_index_ge_1"),
+        CheckConstraint(
+            "atom3_index IS NULL OR atom3_index >= 1",
+            name="atom3_index_ge_1",
+        ),
+        CheckConstraint(
+            "atom4_index IS NULL OR atom4_index >= 1",
+            name="atom4_index_ge_1",
+        ),
+        # Arity enforcement: bond=2, angle=3, dihedral/improper=4
+        CheckConstraint(
+            """
+            CASE coordinate_kind
+                WHEN 'bond' THEN atom3_index IS NULL AND atom4_index IS NULL
+                WHEN 'angle' THEN atom3_index IS NOT NULL AND atom4_index IS NULL
+                ELSE atom3_index IS NOT NULL AND atom4_index IS NOT NULL
+            END
+            """,
+            name="coordinate_arity_matches_kind",
+        ),
+        CheckConstraint(
+            "step_count IS NULL OR step_count >= 1",
+            name="step_count_ge_1",
+        ),
         CheckConstraint(
             "resolution_degrees IS NULL OR resolution_degrees >= 1",
             name="resolution_degrees_ge_1",
@@ -487,10 +540,22 @@ class CalculationScanCoordinate(Base):
     )
 
 
-class CalculationScanConstraint(Base):
-    """Constraint metadata attached to a scan calculation."""
+class CalculationConstraint(Base):
+    """Geometric constraint applied to a calculation.
 
-    __tablename__ = "calc_scan_constraint"
+    Generalizes beyond scan-only constraints: supports constrained
+    optimizations, TS searches, scans, and IRC setups.  Constraint
+    kinds include internal coordinates (bond, angle, dihedral, improper)
+    and Cartesian freezes (cartesian_atom).
+
+    Arity by kind:
+    - ``cartesian_atom``: 1 atom (atom2/3/4 = NULL)
+    - ``bond``: 2 atoms
+    - ``angle``: 3 atoms
+    - ``dihedral``/``improper``: 4 atoms
+    """
+
+    __tablename__ = "calculation_constraint"
 
     calculation_id: Mapped[int] = mapped_column(
         BigInteger,
@@ -499,17 +564,17 @@ class CalculationScanConstraint(Base):
     )
     constraint_index: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    constraint_kind: Mapped[ScanConstraintKind] = mapped_column(
-        SAEnum(ScanConstraintKind, name="scan_constraint_kind"),
+    constraint_kind: Mapped[ConstraintKind] = mapped_column(
+        SAEnum(ConstraintKind, name="constraint_kind"),
         nullable=False,
     )
     atom1_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    atom2_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    atom2_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     atom3_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     atom4_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     target_value: Mapped[Optional[float]] = mapped_column(nullable=True)
 
-    calculation: Mapped["Calculation"] = relationship(back_populates="scan_constraints")
+    calculation: Mapped["Calculation"] = relationship(back_populates="constraints")
 
     __table_args__ = (
         CheckConstraint(
@@ -517,7 +582,10 @@ class CalculationScanConstraint(Base):
             name="constraint_index_ge_1",
         ),
         CheckConstraint("atom1_index >= 1", name="atom1_index_ge_1"),
-        CheckConstraint("atom2_index >= 1", name="atom2_index_ge_1"),
+        CheckConstraint(
+            "atom2_index IS NULL OR atom2_index >= 1",
+            name="atom2_index_ge_1",
+        ),
         CheckConstraint(
             "atom3_index IS NULL OR atom3_index >= 1",
             name="atom3_index_ge_1",
@@ -525,6 +593,18 @@ class CalculationScanConstraint(Base):
         CheckConstraint(
             "atom4_index IS NULL OR atom4_index >= 1",
             name="atom4_index_ge_1",
+        ),
+        # Arity enforcement by constraint kind
+        CheckConstraint(
+            """
+            CASE constraint_kind
+                WHEN 'cartesian_atom' THEN atom2_index IS NULL AND atom3_index IS NULL AND atom4_index IS NULL
+                WHEN 'bond' THEN atom2_index IS NOT NULL AND atom3_index IS NULL AND atom4_index IS NULL
+                WHEN 'angle' THEN atom2_index IS NOT NULL AND atom3_index IS NOT NULL AND atom4_index IS NULL
+                ELSE atom2_index IS NOT NULL AND atom3_index IS NOT NULL AND atom4_index IS NOT NULL
+            END
+            """,
+            name="constraint_arity_matches_kind",
         ),
     )
 
@@ -571,7 +651,8 @@ class CalculationScanPointCoordinateValue(Base):
     calculation_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     point_index: Mapped[int] = mapped_column(Integer, primary_key=True)
     coordinate_index: Mapped[int] = mapped_column(Integer, primary_key=True)
-    angle_degrees: Mapped[float] = mapped_column(nullable=False)
+    coordinate_value: Mapped[float] = mapped_column(nullable=False)
+    value_unit: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     scan_point: Mapped["CalculationScanPoint"] = relationship(
         back_populates="coordinate_values",
@@ -606,6 +687,137 @@ class CalculationScanPointCoordinateValue(Base):
             "coordinate_index >= 1",
             name="coordinate_index_ge_1",
         ),
+    )
+
+
+class CalculationIRCResult(Base):
+    """IRC-level metadata for an IRC calculation.
+
+    Supports both single-direction (Gaussian: one log = one direction)
+    and both-directions (ORCA: one log = forward + reverse) IRC runs.
+
+    ``direction`` indicates the overall run mode:
+    - ``forward`` / ``reverse`` for single-direction jobs
+    - ``both`` for ORCA-style bidirectional IRC
+
+    Per-point direction is on ``CalculationIRCPoint.direction``.
+    """
+
+    __tablename__ = "calc_irc_result"
+
+    calculation_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("calculation.id", deferrable=True, initially="IMMEDIATE"),
+        primary_key=True,
+    )
+    direction: Mapped[IRCDirection] = mapped_column(
+        SAEnum(IRCDirection, name="irc_direction"),
+        nullable=False,
+    )
+    has_forward: Mapped[bool] = mapped_column(default=False)
+    has_reverse: Mapped[bool] = mapped_column(default=False)
+    ts_point_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    point_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    zero_energy_reference_hartree: Mapped[Optional[float]] = mapped_column(
+        nullable=True
+    )
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    calculation: Mapped["Calculation"] = relationship(back_populates="irc_result")
+    points: Mapped[list["CalculationIRCPoint"]] = relationship(
+        primaryjoin=(
+            "CalculationIRCResult.calculation_id == "
+            "foreign(CalculationIRCPoint.calculation_id)"
+        ),
+        viewonly=True,
+        order_by="CalculationIRCPoint.point_index",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "point_count IS NULL OR point_count >= 0", name="point_count_ge_0"
+        ),
+    )
+
+
+class CalculationIRCPoint(Base):
+    """One sampled point on an IRC path.
+
+    PK is ``(calculation_id, point_index)``.  ``point_index`` preserves
+    the source step number from the log file.
+
+    ``direction`` is set per-point to support both:
+    - Gaussian (all points in one direction per log)
+    - ORCA (both directions in one log, TS point has direction NULL)
+
+    ``is_ts`` marks the transition-state point (ORCA ``<= TS`` marker,
+    or Gaussian point 0).
+    """
+
+    __tablename__ = "calc_irc_point"
+
+    calculation_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("calculation.id", deferrable=True, initially="IMMEDIATE"),
+        primary_key=True,
+    )
+    point_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    direction: Mapped[Optional[IRCDirection]] = mapped_column(
+        SAEnum(IRCDirection, name="irc_direction", create_type=False),
+        nullable=True,
+    )
+    is_ts: Mapped[bool] = mapped_column(default=False)
+    reaction_coordinate: Mapped[Optional[float]] = mapped_column(nullable=True)
+    electronic_energy_hartree: Mapped[Optional[float]] = mapped_column(nullable=True)
+    relative_energy_kj_mol: Mapped[Optional[float]] = mapped_column(nullable=True)
+    max_gradient: Mapped[Optional[float]] = mapped_column(nullable=True)
+    rms_gradient: Mapped[Optional[float]] = mapped_column(nullable=True)
+    geometry_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("geometry.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=True,
+    )
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    calculation: Mapped["Calculation"] = relationship(back_populates="irc_points")
+    geometry: Mapped[Optional["Geometry"]] = relationship()
+
+    __table_args__ = (CheckConstraint("point_index >= 0", name="point_index_ge_0"),)
+
+
+class CalculationNEBImageResult(Base):
+    """Per-image result from a NEB calculation.
+
+    Stores the converged energy profile along the NEB path.
+    PK is ``(calculation_id, image_index)``.  Image 0 is the reactant
+    endpoint, image N is the product endpoint.
+
+    The ``is_climbing_image`` flag marks the image that was promoted to
+    a climbing image in NEB-CI — typically the highest-energy image,
+    which approximates the transition state.
+    """
+
+    __tablename__ = "calc_neb_image_result"
+
+    calculation_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("calculation.id", deferrable=True, initially="IMMEDIATE"),
+        primary_key=True,
+    )
+    image_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    electronic_energy_hartree: Mapped[Optional[float]] = mapped_column(nullable=True)
+    relative_energy_kj_mol: Mapped[Optional[float]] = mapped_column(nullable=True)
+    path_distance_angstrom: Mapped[Optional[float]] = mapped_column(nullable=True)
+    max_force: Mapped[Optional[float]] = mapped_column(nullable=True)
+    rms_force: Mapped[Optional[float]] = mapped_column(nullable=True)
+    is_climbing_image: Mapped[bool] = mapped_column(default=False)
+
+    calculation: Mapped["Calculation"] = relationship(back_populates="neb_images")
+
+    __table_args__ = (
+        CheckConstraint("image_index >= 0", name="image_index_ge_0"),
     )
 
 

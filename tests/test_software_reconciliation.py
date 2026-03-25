@@ -13,7 +13,7 @@ import os
 
 import pytest
 
-from app.schemas.refs import SoftwareReleaseRef
+from app.schemas.fragments.refs import SoftwareReleaseRef
 from app.services.gaussian_parameter_parser import parse_software_version
 from app.services.software_reconciliation import (
     SoftwareReconciliationResult,
@@ -22,7 +22,7 @@ from app.services.software_reconciliation import (
 )
 
 TESTS_DIR = os.path.dirname(__file__)
-OPT_LOG = os.path.join(TESTS_DIR, "opt.log")
+OPT_LOG = os.path.join(TESTS_DIR, "opt_g09.log")
 
 
 # ---------------------------------------------------------------------------

@@ -21,8 +21,8 @@ from app.services.gaussian_parameter_parser import (
     parse_gaussian_log,
 )
 
-LOG_PATH = Path(__file__).parent / "opt.log"
-TS_LOG_PATH = Path(__file__).parent / "opt_ts.log"
+LOG_PATH = Path(__file__).parent / "opt_g09.log"
+TS_LOG_PATH = Path(__file__).parent / "ts_opt_g09.log"
 
 
 # ---------------------------------------------------------------------------

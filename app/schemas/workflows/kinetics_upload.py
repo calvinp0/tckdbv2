@@ -12,9 +12,9 @@ from app.db.models.common import (
 from app.schemas.common import SchemaBase
 from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
 from app.schemas.reaction_family import find_canonical_reaction_family
-from app.schemas.refs import LevelOfTheoryRef, SoftwareReleaseRef, WorkflowToolReleaseRef
+from app.schemas.fragments.refs import LevelOfTheoryRef, SoftwareReleaseRef, WorkflowToolReleaseRef
 from app.schemas.utils import normalize_optional_text
-from app.schemas.workflows.literature_submission import LiteratureSubmissionRequest
+from app.schemas.workflows.literature_upload import LiteratureUploadRequest
 
 
 class KineticsReactionParticipantUpload(SchemaBase):
@@ -110,7 +110,7 @@ class KineticsUploadRequest(SchemaBase):
 
     energy_level_of_theory: LevelOfTheoryRef | None = None
 
-    literature: LiteratureSubmissionRequest | None = None
+    literature: LiteratureUploadRequest | None = None
     software_release: SoftwareReleaseRef | None = None
     workflow_tool_release: WorkflowToolReleaseRef | None = None
 

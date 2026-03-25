@@ -89,10 +89,13 @@ def test_orm_read_schemas_validate_from_attributes() -> None:
     scan_coordinate = SimpleNamespace(
         calculation_id=12,
         coordinate_index=1,
+        coordinate_kind="dihedral",
         atom1_index=1,
         atom2_index=2,
         atom3_index=3,
         atom4_index=4,
+        step_count=None,
+        step_size=None,
         resolution_degrees=15.0,
         symmetry_number=3,
     )
@@ -110,7 +113,8 @@ def test_orm_read_schemas_validate_from_attributes() -> None:
         calculation_id=12,
         point_index=1,
         coordinate_index=1,
-        angle_degrees=60.0,
+        coordinate_value=60.0,
+        value_unit=None,
     )
     scan_point = SimpleNamespace(
         calculation_id=12,

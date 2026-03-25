@@ -123,7 +123,21 @@ class ValidationStatus(str, Enum):
     fail = "fail"
 
 
-class ScanConstraintKind(str, Enum):
+class IRCDirection(str, Enum):
+    forward = "forward"
+    reverse = "reverse"
+    both = "both"
+
+
+class ScanCoordinateKind(str, Enum):
+    bond = "bond"
+    angle = "angle"
+    dihedral = "dihedral"
+    improper = "improper"
+
+
+class ConstraintKind(str, Enum):
+    cartesian_atom = "cartesian_atom"
     bond = "bond"
     angle = "angle"
     dihedral = "dihedral"

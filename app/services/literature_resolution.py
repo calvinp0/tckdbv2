@@ -7,7 +7,7 @@ import app.db.models  # noqa: F401
 from app.db.models.common import LiteratureKind
 from app.db.models.literature import Literature
 from app.schemas.entities.literature import LiteratureCreate
-from app.schemas.workflows.literature_submission import LiteratureSubmissionRequest
+from app.schemas.workflows.literature_upload import LiteratureUploadRequest
 from app.services.literature_metadata import (
     fetch_doi_metadata,
     fetch_isbn_metadata,
@@ -17,7 +17,7 @@ from app.services.literature_metadata import (
 
 
 def _kind_from_identifiers(
-    request: LiteratureSubmissionRequest,
+    request: LiteratureUploadRequest,
     *,
     normalized_doi: str | None,
     normalized_isbn: str | None,
@@ -61,7 +61,7 @@ def _metadata_to_fields(
 
 def resolve_literature_submission(
     session: Session,
-    request: LiteratureSubmissionRequest,
+    request: LiteratureUploadRequest,
 ) -> LiteratureCreate:
     """Resolve a workflow literature submission into a canonical create schema.
 
@@ -116,7 +116,7 @@ def resolve_literature_submission(
 
 def resolve_or_create_literature(
     session: Session,
-    request: LiteratureSubmissionRequest,
+    request: LiteratureUploadRequest,
 ) -> Literature:
     """Resolve or create a literature row from workflow submission data.
 

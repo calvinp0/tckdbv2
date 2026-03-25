@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models.literature import Literature
-from app.schemas.workflows.literature_submission import LiteratureSubmissionRequest
+from app.schemas.workflows.literature_upload import LiteratureUploadRequest
 from app.services.literature_resolution import (
     resolve_literature_submission,
     resolve_or_create_literature,
@@ -26,7 +26,7 @@ def test_resolve_literature_submission_enriches_from_doi(monkeypatch) -> None:
         },
     )
 
-    request = LiteratureSubmissionRequest(doi="https://doi.org/10.1000/ABC")
+    request = LiteratureUploadRequest(doi="https://doi.org/10.1000/ABC")
     resolved = resolve_literature_submission(None, request)  # session currently unused
 
     assert resolved.kind.value == "article"
@@ -51,7 +51,7 @@ def test_resolve_literature_submission_enriches_from_isbn(monkeypatch) -> None:
         },
     )
 
-    request = LiteratureSubmissionRequest(isbn="0-387-95452-X")
+    request = LiteratureUploadRequest(isbn="0-387-95452-X")
     resolved = resolve_literature_submission(None, request)
 
     assert resolved.kind.value == "book"
@@ -62,7 +62,7 @@ def test_resolve_literature_submission_enriches_from_isbn(monkeypatch) -> None:
 
 
 def test_resolve_literature_submission_manual_fallback() -> None:
-    request = LiteratureSubmissionRequest(kind="report", title="Manual Title")
+    request = LiteratureUploadRequest(kind="report", title="Manual Title")
     resolved = resolve_literature_submission(None, request)
 
     assert resolved.kind.value == "report"
@@ -91,7 +91,7 @@ def test_resolve_or_create_literature_reuses_existing_row(
 
             resolved = resolve_or_create_literature(
                 session,
-                LiteratureSubmissionRequest(doi="DOI:10.1000/ABC"),
+                LiteratureUploadRequest(doi="DOI:10.1000/ABC"),
             )
 
             assert resolved.id == existing.id

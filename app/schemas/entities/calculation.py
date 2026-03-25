@@ -8,7 +8,7 @@ from app.db.models.common import (
     CalculationGeometryRole,
     CalculationQuality,
     CalculationType,
-    ScanConstraintKind,
+    ConstraintKind,
 )
 from app.schemas.common import (
     ORMBaseSchema,
@@ -210,22 +210,35 @@ class CalculationFreqResultRead(CalculationFreqResultBase, ORMBaseSchema):
 
 class CalculationScanCoordinatePayload(BaseModel):
     coordinate_index: int = Field(ge=1)
+    coordinate_kind: str = Field(pattern=r"^(bond|angle|dihedral|improper)$")
     atom1_index: int = Field(ge=1)
     atom2_index: int = Field(ge=1)
-    atom3_index: int = Field(ge=1)
-    atom4_index: int = Field(ge=1)
+    atom3_index: int | None = Field(default=None, ge=1)
+    atom4_index: int | None = Field(default=None, ge=1)
+    step_count: int | None = Field(default=None, ge=1)
+    step_size: float | None = None
+    start_value: float | None = None
+    end_value: float | None = None
+    value_unit: str | None = None
     resolution_degrees: float | None = None
     symmetry_number: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")
-    def validate_distinct_atoms(self) -> Self:
-        atom_indices = {
-            self.atom1_index,
-            self.atom2_index,
-            self.atom3_index,
-            self.atom4_index,
-        }
-        if len(atom_indices) != 4:
+    def validate_arity_and_distinct_atoms(self) -> Self:
+        atoms = [self.atom1_index, self.atom2_index]
+        if self.atom3_index is not None:
+            atoms.append(self.atom3_index)
+        if self.atom4_index is not None:
+            atoms.append(self.atom4_index)
+
+        expected = {"bond": 2, "angle": 3, "dihedral": 4, "improper": 4}
+        n_expected = expected[self.coordinate_kind]
+        if len(atoms) != n_expected:
+            raise ValueError(
+                f"{self.coordinate_kind} coordinate requires {n_expected} atoms, "
+                f"got {len(atoms)}."
+            )
+        if len(set(atoms)) != len(atoms):
             raise ValueError("Scan coordinate atom indices must be distinct.")
         return self
 
@@ -236,10 +249,16 @@ class CalculationScanCoordinateCreate(CalculationScanCoordinatePayload, SchemaBa
 
 class CalculationScanCoordinateUpdate(SchemaBase):
     coordinate_index: int | None = Field(default=None, ge=1)
+    coordinate_kind: str | None = Field(default=None, pattern=r"^(bond|angle|dihedral|improper)$")
     atom1_index: int | None = Field(default=None, ge=1)
     atom2_index: int | None = Field(default=None, ge=1)
     atom3_index: int | None = Field(default=None, ge=1)
     atom4_index: int | None = Field(default=None, ge=1)
+    step_count: int | None = Field(default=None, ge=1)
+    step_size: float | None = None
+    start_value: float | None = None
+    end_value: float | None = None
+    value_unit: str | None = None
     resolution_degrees: float | None = None
     symmetry_number: int | None = Field(default=None, ge=1)
 
@@ -248,23 +267,23 @@ class CalculationScanCoordinateRead(CalculationScanCoordinatePayload, ORMBaseSch
     calculation_id: int
 
 
-class CalculationScanConstraintPayload(BaseModel):
+class CalculationConstraintPayload(BaseModel):
     constraint_index: int = Field(ge=1)
-    constraint_kind: ScanConstraintKind
+    constraint_kind: ConstraintKind
     atom1_index: int = Field(ge=1)
-    atom2_index: int = Field(ge=1)
+    atom2_index: int | None = Field(default=None, ge=1)
     atom3_index: int | None = Field(default=None, ge=1)
     atom4_index: int | None = Field(default=None, ge=1)
     target_value: float | None = None
 
 
-class CalculationScanConstraintCreate(CalculationScanConstraintPayload, SchemaBase):
+class CalculationConstraintCreate(CalculationConstraintPayload, SchemaBase):
     pass
 
 
-class CalculationScanConstraintUpdate(SchemaBase):
+class CalculationConstraintUpdate(SchemaBase):
     constraint_index: int | None = Field(default=None, ge=1)
-    constraint_kind: ScanConstraintKind | None = None
+    constraint_kind: ConstraintKind | None = None
     atom1_index: int | None = Field(default=None, ge=1)
     atom2_index: int | None = Field(default=None, ge=1)
     atom3_index: int | None = Field(default=None, ge=1)
@@ -272,13 +291,14 @@ class CalculationScanConstraintUpdate(SchemaBase):
     target_value: float | None = None
 
 
-class CalculationScanConstraintRead(CalculationScanConstraintPayload, ORMBaseSchema):
+class CalculationConstraintRead(CalculationConstraintPayload, ORMBaseSchema):
     calculation_id: int
 
 
 class CalculationScanPointCoordinateValuePayload(BaseModel):
     coordinate_index: int = Field(ge=1)
-    angle_degrees: float
+    coordinate_value: float
+    value_unit: str | None = None
 
 
 class CalculationScanPointCoordinateValueCreate(
@@ -290,7 +310,8 @@ class CalculationScanPointCoordinateValueCreate(
 
 class CalculationScanPointCoordinateValueUpdate(SchemaBase):
     coordinate_index: int | None = Field(default=None, ge=1)
-    angle_degrees: float | None = None
+    coordinate_value: float | None = None
+    value_unit: str | None = None
 
 
 class CalculationScanPointCoordinateValueRead(
@@ -351,7 +372,7 @@ class CalculationScanResultPayload(BaseModel):
 
 class CalculationScanResultCreate(CalculationScanResultPayload, SchemaBase):
     coordinates: list[CalculationScanCoordinateCreate] = Field(default_factory=list)
-    constraints: list[CalculationScanConstraintCreate] = Field(default_factory=list)
+    constraints: list[CalculationConstraintCreate] = Field(default_factory=list)
     points: list[CalculationScanPointCreate] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -400,5 +421,5 @@ class CalculationScanResultUpdate(SchemaBase):
 class CalculationScanResultRead(CalculationScanResultPayload, ORMBaseSchema):
     calculation_id: int
     coordinates: list[CalculationScanCoordinateRead] = Field(default_factory=list)
-    constraints: list[CalculationScanConstraintRead] = Field(default_factory=list)
+    constraints: list[CalculationConstraintRead] = Field(default_factory=list)
     points: list[CalculationScanPointRead] = Field(default_factory=list)

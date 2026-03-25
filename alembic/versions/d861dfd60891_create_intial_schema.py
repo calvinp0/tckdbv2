@@ -745,37 +745,46 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['calculation_id'], ['calculation.id'], name=op.f('fk_calc_opt_result_calculation_id_calculation'), initially='IMMEDIATE', deferrable=True),
     sa.PrimaryKeyConstraint('calculation_id', name=op.f('pk_calc_opt_result'))
     )
-    op.create_table('calc_scan_constraint',
+    op.create_table('calculation_constraint',
     sa.Column('calculation_id', sa.BigInteger(), nullable=False),
     sa.Column('constraint_index', sa.Integer(), nullable=False),
-    sa.Column('constraint_kind', sa.Enum('bond', 'angle', 'dihedral', 'improper', name='scan_constraint_kind'), nullable=False),
+    sa.Column('constraint_kind', sa.Enum('cartesian_atom', 'bond', 'angle', 'dihedral', 'improper', name='constraint_kind'), nullable=False),
     sa.Column('atom1_index', sa.Integer(), nullable=False),
-    sa.Column('atom2_index', sa.Integer(), nullable=False),
+    sa.Column('atom2_index', sa.Integer(), nullable=True),
     sa.Column('atom3_index', sa.Integer(), nullable=True),
     sa.Column('atom4_index', sa.Integer(), nullable=True),
     sa.Column('target_value', sa.Float(), nullable=True),
-    sa.CheckConstraint('atom1_index >= 1', name=op.f('ck_calc_scan_constraint_atom1_index_ge_1')),
-    sa.CheckConstraint('atom2_index >= 1', name=op.f('ck_calc_scan_constraint_atom2_index_ge_1')),
-    sa.CheckConstraint('atom3_index IS NULL OR atom3_index >= 1', name=op.f('ck_calc_scan_constraint_atom3_index_ge_1')),
-    sa.CheckConstraint('atom4_index IS NULL OR atom4_index >= 1', name=op.f('ck_calc_scan_constraint_atom4_index_ge_1')),
-    sa.CheckConstraint('constraint_index >= 1', name=op.f('ck_calc_scan_constraint_constraint_index_ge_1')),
-    sa.ForeignKeyConstraint(['calculation_id'], ['calculation.id'], name=op.f('fk_calc_scan_constraint_calculation_id_calculation'), initially='IMMEDIATE', deferrable=True),
-    sa.PrimaryKeyConstraint('calculation_id', 'constraint_index', name=op.f('pk_calc_scan_constraint'))
+    sa.CheckConstraint('atom1_index >= 1', name=op.f('ck_calculation_constraint_atom1_index_ge_1')),
+    sa.CheckConstraint('atom2_index IS NULL OR atom2_index >= 1', name=op.f('ck_calculation_constraint_atom2_index_ge_1')),
+    sa.CheckConstraint('atom3_index IS NULL OR atom3_index >= 1', name=op.f('ck_calculation_constraint_atom3_index_ge_1')),
+    sa.CheckConstraint('atom4_index IS NULL OR atom4_index >= 1', name=op.f('ck_calculation_constraint_atom4_index_ge_1')),
+    sa.CheckConstraint('constraint_index >= 1', name=op.f('ck_calculation_constraint_constraint_index_ge_1')),
+    sa.CheckConstraint("CASE constraint_kind WHEN 'cartesian_atom' THEN atom2_index IS NULL AND atom3_index IS NULL AND atom4_index IS NULL WHEN 'bond' THEN atom2_index IS NOT NULL AND atom3_index IS NULL AND atom4_index IS NULL WHEN 'angle' THEN atom2_index IS NOT NULL AND atom3_index IS NOT NULL AND atom4_index IS NULL ELSE atom2_index IS NOT NULL AND atom3_index IS NOT NULL AND atom4_index IS NOT NULL END", name=op.f('ck_calculation_constraint_constraint_arity_matches_kind')),
+    sa.ForeignKeyConstraint(['calculation_id'], ['calculation.id'], name=op.f('fk_calculation_constraint_calculation_id_calculation'), initially='IMMEDIATE', deferrable=True),
+    sa.PrimaryKeyConstraint('calculation_id', 'constraint_index', name=op.f('pk_calculation_constraint'))
     )
     op.create_table('calc_scan_coordinate',
     sa.Column('calculation_id', sa.BigInteger(), nullable=False),
     sa.Column('coordinate_index', sa.Integer(), nullable=False),
+    sa.Column('coordinate_kind', sa.Enum('bond', 'angle', 'dihedral', 'improper', name='scan_coordinate_kind'), nullable=False),
     sa.Column('atom1_index', sa.Integer(), nullable=False),
     sa.Column('atom2_index', sa.Integer(), nullable=False),
-    sa.Column('atom3_index', sa.Integer(), nullable=False),
-    sa.Column('atom4_index', sa.Integer(), nullable=False),
+    sa.Column('atom3_index', sa.Integer(), nullable=True),
+    sa.Column('atom4_index', sa.Integer(), nullable=True),
+    sa.Column('step_count', sa.Integer(), nullable=True),
+    sa.Column('step_size', sa.Float(), nullable=True),
+    sa.Column('start_value', sa.Float(), nullable=True),
+    sa.Column('end_value', sa.Float(), nullable=True),
+    sa.Column('value_unit', sa.Text(), nullable=True),
     sa.Column('resolution_degrees', sa.Integer(), nullable=True),
     sa.Column('symmetry_number', sa.SmallInteger(), nullable=True),
     sa.CheckConstraint('atom1_index >= 1', name=op.f('ck_calc_scan_coordinate_atom1_index_ge_1')),
     sa.CheckConstraint('atom2_index >= 1', name=op.f('ck_calc_scan_coordinate_atom2_index_ge_1')),
-    sa.CheckConstraint('atom3_index >= 1', name=op.f('ck_calc_scan_coordinate_atom3_index_ge_1')),
-    sa.CheckConstraint('atom4_index >= 1', name=op.f('ck_calc_scan_coordinate_atom4_index_ge_1')),
+    sa.CheckConstraint('atom3_index IS NULL OR atom3_index >= 1', name=op.f('ck_calc_scan_coordinate_atom3_index_ge_1')),
+    sa.CheckConstraint('atom4_index IS NULL OR atom4_index >= 1', name=op.f('ck_calc_scan_coordinate_atom4_index_ge_1')),
     sa.CheckConstraint('coordinate_index >= 1', name=op.f('ck_calc_scan_coordinate_coordinate_index_ge_1')),
+    sa.CheckConstraint("CASE coordinate_kind WHEN 'bond' THEN atom3_index IS NULL AND atom4_index IS NULL WHEN 'angle' THEN atom3_index IS NOT NULL AND atom4_index IS NULL ELSE atom3_index IS NOT NULL AND atom4_index IS NOT NULL END", name=op.f('ck_calc_scan_coordinate_coordinate_arity_matches_kind')),
+    sa.CheckConstraint('step_count IS NULL OR step_count >= 1', name=op.f('ck_calc_scan_coordinate_step_count_ge_1')),
     sa.CheckConstraint('resolution_degrees IS NULL OR resolution_degrees >= 1', name=op.f('ck_calc_scan_coordinate_resolution_degrees_ge_1')),
     sa.CheckConstraint('symmetry_number IS NULL OR symmetry_number >= 1', name=op.f('ck_calc_scan_coordinate_symmetry_number_ge_1')),
     sa.ForeignKeyConstraint(['calculation_id'], ['calculation.id'], name=op.f('fk_calc_scan_coordinate_calculation_id_calculation'), initially='IMMEDIATE', deferrable=True),
@@ -802,6 +811,49 @@ def upgrade() -> None:
     sa.CheckConstraint('dimension >= 1', name=op.f('ck_calc_scan_result_dimension_ge_1')),
     sa.ForeignKeyConstraint(['calculation_id'], ['calculation.id'], name=op.f('fk_calc_scan_result_calculation_id_calculation'), initially='IMMEDIATE', deferrable=True),
     sa.PrimaryKeyConstraint('calculation_id', name=op.f('pk_calc_scan_result'))
+    )
+    op.create_table('calc_irc_result',
+    sa.Column('calculation_id', sa.BigInteger(), nullable=False),
+    sa.Column('direction', sa.Enum('forward', 'reverse', 'both', name='irc_direction'), nullable=False),
+    sa.Column('has_forward', sa.Boolean(), nullable=False, server_default='false'),
+    sa.Column('has_reverse', sa.Boolean(), nullable=False, server_default='false'),
+    sa.Column('ts_point_index', sa.Integer(), nullable=True),
+    sa.Column('point_count', sa.Integer(), nullable=True),
+    sa.Column('zero_energy_reference_hartree', sa.Float(), nullable=True),
+    sa.Column('note', sa.Text(), nullable=True),
+    sa.CheckConstraint('point_count IS NULL OR point_count >= 0', name=op.f('ck_calc_irc_result_point_count_ge_0')),
+    sa.ForeignKeyConstraint(['calculation_id'], ['calculation.id'], name=op.f('fk_calc_irc_result_calculation_id_calculation'), initially='IMMEDIATE', deferrable=True),
+    sa.PrimaryKeyConstraint('calculation_id', name=op.f('pk_calc_irc_result'))
+    )
+    op.create_table('calc_irc_point',
+    sa.Column('calculation_id', sa.BigInteger(), nullable=False),
+    sa.Column('point_index', sa.Integer(), nullable=False),
+    sa.Column('direction', sa.Enum('forward', 'reverse', 'both', name='irc_direction', create_type=False), nullable=True),
+    sa.Column('is_ts', sa.Boolean(), nullable=False, server_default='false'),
+    sa.Column('reaction_coordinate', sa.Float(), nullable=True),
+    sa.Column('electronic_energy_hartree', sa.Float(), nullable=True),
+    sa.Column('relative_energy_kj_mol', sa.Float(), nullable=True),
+    sa.Column('max_gradient', sa.Float(), nullable=True),
+    sa.Column('rms_gradient', sa.Float(), nullable=True),
+    sa.Column('geometry_id', sa.BigInteger(), nullable=True),
+    sa.Column('note', sa.Text(), nullable=True),
+    sa.CheckConstraint('point_index >= 0', name=op.f('ck_calc_irc_point_point_index_ge_0')),
+    sa.ForeignKeyConstraint(['calculation_id'], ['calculation.id'], name=op.f('fk_calc_irc_point_calculation_id_calculation'), initially='IMMEDIATE', deferrable=True),
+    sa.ForeignKeyConstraint(['geometry_id'], ['geometry.id'], name=op.f('fk_calc_irc_point_geometry_id_geometry'), initially='IMMEDIATE', deferrable=True),
+    sa.PrimaryKeyConstraint('calculation_id', 'point_index', name=op.f('pk_calc_irc_point'))
+    )
+    op.create_table('calc_neb_image_result',
+    sa.Column('calculation_id', sa.BigInteger(), nullable=False),
+    sa.Column('image_index', sa.Integer(), nullable=False),
+    sa.Column('electronic_energy_hartree', sa.Float(), nullable=True),
+    sa.Column('relative_energy_kj_mol', sa.Float(), nullable=True),
+    sa.Column('path_distance_angstrom', sa.Float(), nullable=True),
+    sa.Column('max_force', sa.Float(), nullable=True),
+    sa.Column('rms_force', sa.Float(), nullable=True),
+    sa.Column('is_climbing_image', sa.Boolean(), nullable=False, server_default='false'),
+    sa.CheckConstraint('image_index >= 0', name=op.f('ck_calc_neb_image_result_image_index_ge_0')),
+    sa.ForeignKeyConstraint(['calculation_id'], ['calculation.id'], name=op.f('fk_calc_neb_image_result_calculation_id_calculation'), initially='IMMEDIATE', deferrable=True),
+    sa.PrimaryKeyConstraint('calculation_id', 'image_index', name=op.f('pk_calc_neb_image_result'))
     )
     op.create_table('calc_sp_result',
     sa.Column('calculation_id', sa.BigInteger(), nullable=False),
@@ -1044,7 +1096,8 @@ def upgrade() -> None:
     sa.Column('calculation_id', sa.BigInteger(), nullable=False),
     sa.Column('point_index', sa.Integer(), nullable=False),
     sa.Column('coordinate_index', sa.Integer(), nullable=False),
-    sa.Column('angle_degrees', sa.Float(), nullable=False),
+    sa.Column('coordinate_value', sa.Float(), nullable=False),
+    sa.Column('value_unit', sa.Text(), nullable=True),
     sa.CheckConstraint('coordinate_index >= 1', name=op.f('ck_calc_scan_point_coordinate_value_coordinate_index_ge_1')),
     sa.CheckConstraint('point_index >= 1', name=op.f('ck_calc_scan_point_coordinate_value_point_index_ge_1')),
     sa.ForeignKeyConstraint(['calculation_id', 'coordinate_index'], ['calc_scan_coordinate.calculation_id', 'calc_scan_coordinate.coordinate_index'], name=op.f('fk_calc_scan_point_coordinate_value_calculation_id_calc_scan_coordinate'), initially='IMMEDIATE', deferrable=True),
@@ -1132,10 +1185,16 @@ def downgrade() -> None:
     op.drop_table('calc_geometry_validation')
     op.execute("DROP TYPE IF EXISTS validation_status")
     op.drop_table('calc_sp_result')
+    op.drop_table('calc_neb_image_result')
+    op.drop_table('calc_irc_point')
+    op.drop_table('calc_irc_result')
+    op.execute("DROP TYPE IF EXISTS irc_direction")
     op.drop_table('calc_scan_result')
     op.drop_table('calc_scan_point')
     op.drop_table('calc_scan_coordinate')
-    op.drop_table('calc_scan_constraint')
+    op.execute("DROP TYPE IF EXISTS scan_coordinate_kind")
+    op.drop_table('calculation_constraint')
+    op.execute("DROP TYPE IF EXISTS constraint_kind")
     op.drop_table('calc_opt_result')
     op.drop_table('calc_freq_result')
     op.drop_table('transition_state_selection')

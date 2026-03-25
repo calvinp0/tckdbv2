@@ -33,15 +33,15 @@ from app.db.models.common import (
 )
 from app.schemas.common import SchemaBase
 from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
-from app.schemas.geometry import GeometryPayload
+from app.schemas.fragments.geometry import GeometryPayload
 from app.schemas.reaction_family import find_canonical_reaction_family
-from app.schemas.refs import (
+from app.schemas.fragments.refs import (
     LevelOfTheoryRef,
     SoftwareReleaseRef,
     WorkflowToolReleaseRef,
 )
 from app.schemas.utils import normalize_optional_text
-from app.schemas.workflows.literature_submission import LiteratureSubmissionRequest
+from app.schemas.workflows.literature_upload import LiteratureUploadRequest
 from app.schemas.workflows.transport_upload import TransportUploadPayload
 
 
@@ -451,7 +451,7 @@ class NetworkSolveIn(SchemaBase):
     grain_count: int | None = Field(default=None, ge=1)
     emax_kj_mol: float | None = None
 
-    literature: LiteratureSubmissionRequest | None = None
+    literature: LiteratureUploadRequest | None = None
     software_release: SoftwareReleaseRef | None = None
     workflow_tool_release: WorkflowToolReleaseRef | None = None
 
@@ -533,7 +533,7 @@ class NetworkPDepUploadRequest(SchemaBase):
     name: str | None = None
     description: str | None = None
 
-    literature: LiteratureSubmissionRequest | None = None
+    literature: LiteratureUploadRequest | None = None
     software_release: SoftwareReleaseRef | None = None
     workflow_tool_release: WorkflowToolReleaseRef | None = None
 

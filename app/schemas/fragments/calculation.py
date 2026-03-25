@@ -4,7 +4,7 @@ from pydantic import Field, model_validator
 
 from app.db.models.common import CalculationQuality, CalculationType
 from app.schemas.common import SchemaBase
-from app.schemas.refs import (
+from app.schemas.fragments.refs import (
     LevelOfTheoryRef,
     SoftwareReleaseRef,
     WorkflowToolReleaseRef,

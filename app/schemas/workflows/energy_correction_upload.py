@@ -17,9 +17,9 @@ from app.db.models.common import (
     MeliusBacComponentKind,
 )
 from app.schemas.common import SchemaBase
-from app.schemas.refs import LevelOfTheoryRef
+from app.schemas.fragments.refs import LevelOfTheoryRef
 from app.schemas.utils import normalize_optional_text, normalize_required_text
-from app.schemas.workflows.literature_submission import LiteratureSubmissionRequest
+from app.schemas.workflows.literature_upload import LiteratureUploadRequest
 
 # ---------------------------------------------------------------------------
 # Inline refs — resolved to DB rows by the service layer
@@ -36,7 +36,7 @@ class EnergyCorrectionSchemeRef(SchemaBase):
     kind: EnergyCorrectionSchemeKind
     name: str = Field(min_length=1)
     level_of_theory: LevelOfTheoryRef | None = None
-    source_literature: LiteratureSubmissionRequest | None = None
+    source_literature: LiteratureUploadRequest | None = None
     version: str | None = None
     units: str | None = None
     note: str | None = None
@@ -104,7 +104,7 @@ class FrequencyScaleFactorRef(SchemaBase):
     level_of_theory: LevelOfTheoryRef
     scale_kind: FrequencyScaleKind
     value: float = Field(gt=0)
-    source_literature: LiteratureSubmissionRequest | None = None
+    source_literature: LiteratureUploadRequest | None = None
     note: str | None = None
 
     @model_validator(mode="after")

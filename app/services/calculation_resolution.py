@@ -28,7 +28,7 @@ from app.schemas.fragments.calculation import (
     CalculationCreateRequest,
     CalculationWithResultsPayload,
 )
-from app.schemas.refs import (
+from app.schemas.fragments.refs import (
     LevelOfTheoryRef,
     WorkflowToolReleaseRef,
 )

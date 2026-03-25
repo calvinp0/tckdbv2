@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
 from app.db.models.software import Software, SoftwareRelease
-from app.schemas.refs import SoftwareReleaseRef
+from app.schemas.fragments.refs import SoftwareReleaseRef
 from app.schemas.utils import normalize_required_text
 
 _SOFTWARE_NAME_ALIASES = {

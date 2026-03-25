@@ -19,8 +19,8 @@ from app.schemas.fragments.calculation import (
     CalculationWithResultsPayload,
 )
 from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
-from app.schemas.geometry import GeometryPayload
-from app.schemas.refs import SoftwareReleaseRef, WorkflowToolReleaseRef
+from app.schemas.fragments.geometry import GeometryPayload
+from app.schemas.fragments.refs import SoftwareReleaseRef, WorkflowToolReleaseRef
 from app.schemas.utils import normalize_optional_text
 from app.schemas.workflows.energy_correction_upload import (
     AppliedEnergyCorrectionUploadPayload,
