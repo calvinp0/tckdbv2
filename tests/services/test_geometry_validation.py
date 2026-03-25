@@ -27,10 +27,11 @@ from app.services.geometry_validation import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
-TESTS_DIR = os.path.dirname(__file__)
-OPT_LOG = os.path.join(TESTS_DIR, "opt_g09.log")
-FREQ_LOG = os.path.join(TESTS_DIR, "freq_g09.log")
-TS_LOG = os.path.join(TESTS_DIR, "ts_opt_g09.log")
+FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "..", "fixtures")
+GAUSSIAN_DIR = os.path.join(FIXTURES_DIR, "gaussian")
+OPT_LOG = os.path.join(GAUSSIAN_DIR, "opt_g09.log")
+FREQ_LOG = os.path.join(GAUSSIAN_DIR, "freq_g09.log")
+TS_LOG = os.path.join(GAUSSIAN_DIR, "ts_opt_g09.log")
 
 # SMILES for the species in opt.log / freq.log: N2C3H7 doublet radical
 SPECIES_SMILES = "[N]=NCCC"

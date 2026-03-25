@@ -21,8 +21,10 @@ from app.services.gaussian_parameter_parser import (
     parse_gaussian_log,
 )
 
-LOG_PATH = Path(__file__).parent / "opt_g09.log"
-TS_LOG_PATH = Path(__file__).parent / "ts_opt_g09.log"
+FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
+GAUSSIAN_DIR = FIXTURES_DIR / "gaussian"
+LOG_PATH = GAUSSIAN_DIR / "opt_g09.log"
+TS_LOG_PATH = GAUSSIAN_DIR / "ts_opt_g09.log"
 
 
 # ---------------------------------------------------------------------------

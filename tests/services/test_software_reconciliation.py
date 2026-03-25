@@ -21,8 +21,9 @@ from app.services.software_reconciliation import (
     reconcile_software_provenance,
 )
 
-TESTS_DIR = os.path.dirname(__file__)
-OPT_LOG = os.path.join(TESTS_DIR, "opt_g09.log")
+FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "..", "fixtures")
+GAUSSIAN_DIR = os.path.join(FIXTURES_DIR, "gaussian")
+OPT_LOG = os.path.join(GAUSSIAN_DIR, "opt_g09.log")
 
 
 # ---------------------------------------------------------------------------

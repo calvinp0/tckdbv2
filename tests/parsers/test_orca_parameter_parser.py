@@ -19,8 +19,9 @@ from app.services.orca_parameter_parser import (
     parse_software_version,
 )
 
-TESTS_DIR = os.path.dirname(__file__)
-SP_LOG = os.path.join(TESTS_DIR, "sp_orca.log")
+FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "..", "fixtures")
+ORCA_DIR = os.path.join(FIXTURES_DIR, "orca")
+SP_LOG = os.path.join(ORCA_DIR, "sp_orca.log")
 
 
 @pytest.fixture

@@ -116,13 +116,15 @@ def test_persist_kinetics_upload_reuses_existing_literature_by_doi(
     request = _kinetics_request()
 
     with Session(db_engine) as session, session.begin():
-        before_count = len(session.scalars(select(Kinetics)).all())
+        before_kinetics = len(session.scalars(select(Kinetics)).all())
         first = persist_kinetics_upload(session, request)
+        after_first_literature = len(session.scalars(select(Literature)).all())
         second = persist_kinetics_upload(session, request)
+        after_second_literature = len(session.scalars(select(Literature)).all())
 
         assert first.literature_id == second.literature_id
-        literature_rows = session.scalars(select(Literature)).all()
-        assert len(literature_rows) == 1
+        # Second call must not create a duplicate Literature row
+        assert after_second_literature == after_first_literature
 
         kinetics_rows = session.scalars(select(Kinetics)).all()
-        assert len(kinetics_rows) == before_count + 2
+        assert len(kinetics_rows) == before_kinetics + 2
