@@ -1,4 +1,4 @@
-"""Tests for artifact validation and content-addressed storage."""
+"""Tests for artifact validation and S3 content-addressed storage."""
 
 from __future__ import annotations
 
@@ -10,10 +10,12 @@ import pytest
 from app.db.models.common import ArtifactKind
 from app.services.artifact_storage import (
     ArtifactValidationError,
-    content_addressed_path,
+    content_addressed_key,
     store_artifact,
     validate_artifact,
     validate_total_upload_size,
+    _get_s3_client,
+    _ensure_bucket,
     MAX_ARTIFACT_BYTES,
     MAX_TOTAL_UPLOAD_BYTES,
 )
@@ -22,6 +24,9 @@ FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 GAUSSIAN_OPT_LOG = FIXTURES / "gaussian" / "opt_g09.log"
 GAUSSIAN_FREQ_LOG = FIXTURES / "gaussian" / "freq_g09.log"
 ORCA_OPT_LOG = FIXTURES / "orca" / "opt_orca.out"
+
+# Dedicated test bucket so tests don't pollute the dev bucket.
+TEST_BUCKET = "tckdb-artifacts-test"
 
 
 # ---------------------------------------------------------------------------
@@ -106,8 +111,6 @@ class TestSizeLimits:
             validate_artifact(b"", ArtifactKind.output_log)
 
     def test_oversized_file_rejected(self):
-        # Construct content just over the limit — don't allocate real memory
-        # Just check the validation logic with a mock-sized content
         content = b"Entering Gaussian System\n" + b"x" * (MAX_ARTIFACT_BYTES + 1 - 25)
         with pytest.raises(ArtifactValidationError, match="exceeds maximum size"):
             validate_artifact(content, ArtifactKind.output_log)
@@ -140,7 +143,6 @@ class TestTextValidation:
     def test_binary_checkpoint_accepted(self):
         """checkpoint kind allows binary content (no text check)."""
         content = b"\x00\x01\x02\x03\xff\xfe binary checkpoint data"
-        # No ESS signature check for checkpoint kind either
         validate_artifact(content, ArtifactKind.checkpoint)
 
 
@@ -162,26 +164,90 @@ class TestNonLogKinds:
 
 
 # ---------------------------------------------------------------------------
-# Content-addressed storage
+# S3 content-addressed storage (requires MinIO running)
 # ---------------------------------------------------------------------------
 
 
-class TestContentAddressedStorage:
-    def test_path_layout(self, tmp_path):
-        sha = "a577811dc7167bfc1234567890abcdef1234567890abcdef1234567890abcdef"
-        path = content_addressed_path(sha, artifact_dir=tmp_path)
-        assert path == tmp_path / "a5" / sha
+def _minio_available() -> bool:
+    """Check if MinIO is reachable."""
+    try:
+        client = _get_s3_client()
+        client.list_buckets()
+        return True
+    except Exception:
+        return False
 
-    def test_store_and_dedup(self, tmp_path):
+
+@pytest.fixture()
+def s3_test_bucket():
+    """Create a dedicated test bucket and clean up after."""
+    client = _get_s3_client()
+    _ensure_bucket(client)
+    # Ensure test bucket exists
+    try:
+        client.head_bucket(Bucket=TEST_BUCKET)
+    except Exception:
+        client.create_bucket(Bucket=TEST_BUCKET)
+
+    yield client, TEST_BUCKET
+
+    # Cleanup: delete all objects in test bucket
+    try:
+        response = client.list_objects_v2(Bucket=TEST_BUCKET)
+        for obj in response.get("Contents", []):
+            client.delete_object(Bucket=TEST_BUCKET, Key=obj["Key"])
+        client.delete_bucket(Bucket=TEST_BUCKET)
+    except Exception:
+        pass
+
+
+@pytest.mark.skipif(not _minio_available(), reason="MinIO not running")
+class TestS3Storage:
+    def test_key_layout(self):
+        sha = "a577811dc7167bfc1234567890abcdef1234567890abcdef1234567890abcdef"
+        key = content_addressed_key(sha)
+        assert key == f"a5/{sha}"
+
+    def test_store_returns_s3_uri(self, s3_test_bucket):
+        client, bucket = s3_test_bucket
         content = GAUSSIAN_OPT_LOG.read_bytes()
         sha = hashlib.sha256(content).hexdigest()
 
-        # First store
-        path1 = store_artifact(content, sha, artifact_dir=tmp_path)
-        assert path1.exists()
-        assert path1.read_bytes() == content
-        assert path1 == tmp_path / sha[:2] / sha
+        uri = store_artifact(content, sha, client=client, bucket=bucket)
+        assert uri.startswith(f"s3://{bucket}/")
+        assert sha in uri
 
-        # Second store (same content) — dedup, same path
-        path2 = store_artifact(content, sha, artifact_dir=tmp_path)
-        assert path1 == path2
+    def test_stored_content_matches(self, s3_test_bucket):
+        client, bucket = s3_test_bucket
+        content = GAUSSIAN_OPT_LOG.read_bytes()
+        sha = hashlib.sha256(content).hexdigest()
+
+        store_artifact(content, sha, client=client, bucket=bucket)
+
+        # Retrieve and verify
+        key = content_addressed_key(sha)
+        response = client.get_object(Bucket=bucket, Key=key)
+        stored = response["Body"].read()
+        assert stored == content
+
+    def test_dedup_same_content(self, s3_test_bucket):
+        client, bucket = s3_test_bucket
+        content = GAUSSIAN_OPT_LOG.read_bytes()
+        sha = hashlib.sha256(content).hexdigest()
+
+        uri1 = store_artifact(content, sha, client=client, bucket=bucket)
+        uri2 = store_artifact(content, sha, client=client, bucket=bucket)
+        assert uri1 == uri2
+
+    def test_different_files_different_keys(self, s3_test_bucket):
+        client, bucket = s3_test_bucket
+
+        content1 = GAUSSIAN_OPT_LOG.read_bytes()
+        sha1 = hashlib.sha256(content1).hexdigest()
+        uri1 = store_artifact(content1, sha1, client=client, bucket=bucket)
+
+        content2 = GAUSSIAN_FREQ_LOG.read_bytes()
+        sha2 = hashlib.sha256(content2).hexdigest()
+        uri2 = store_artifact(content2, sha2, client=client, bucket=bucket)
+
+        assert uri1 != uri2

@@ -82,12 +82,12 @@ def _persist_artifact(
         declared_bytes=artifact_in.bytes,
     )
 
-    stored_path = store_artifact(content, computed_sha)
+    uri = store_artifact(content, computed_sha)
 
     artifact = CalculationArtifact(
         calculation_id=calculation_id,
         kind=artifact_in.kind,
-        uri=str(stored_path),
+        uri=uri,
         sha256=computed_sha,
         bytes=len(content),
     )

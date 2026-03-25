@@ -10,6 +10,24 @@ services:
     network_mode: host
     volumes:
       - tckdb_pgdata:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    ports:
+      - 9000:9000
+      - 9001:9001
+    environment:
+      MINIO_ROOT_USER: tckdb
+      MINIO_ROOT_PASSWORD: tckdb_secret
+    volumes:
+      - tckdb_minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
 volumes:
   tckdb_pgdata:
-  tckdb_artifacts:
+  tckdb_minio:
