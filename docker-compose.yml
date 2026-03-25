@@ -12,3 +12,4 @@ services:
       - tckdb_pgdata:/var/lib/postgresql/data
 volumes:
   tckdb_pgdata:
+  tckdb_artifacts:

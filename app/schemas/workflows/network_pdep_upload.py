@@ -26,6 +26,7 @@ from typing import Literal, Self
 from pydantic import Field, field_validator, model_validator
 
 from app.db.models.common import (
+    ArtifactKind,
     CalculationType,
     NetworkChannelKind,
     NetworkSolveCalculationRole,
@@ -50,6 +51,35 @@ from app.schemas.workflows.transport_upload import TransportUploadPayload
 # ---------------------------------------------------------------------------
 
 
+class ArtifactIn(SchemaBase):
+    """An artifact (file) attached to a calculation — upload transport only.
+
+    Provide ``content_base64`` to upload file content inline.  The server
+    validates the content (ESS signature, size limits, SHA-256 integrity),
+    writes it to a content-addressed store, and creates a
+    ``CalculationArtifact`` row with the final URI.
+
+    This schema is strictly upload-facing.  The DB model
+    (``CalculationArtifact``) stores ``uri``, ``sha256``, ``bytes``, and
+    ``kind`` — no inline content.
+
+    :param kind: Artifact type (input, output_log, checkpoint, etc.).
+    :param filename: Original filename (provenance metadata, not used for
+        storage path).  E.g. ``"input.log"``.
+    :param content_base64: Base64-encoded file content.
+    :param sha256: Optional SHA-256 hash declared by the uploader.
+        If provided, the server verifies it matches the content.
+    :param bytes: Optional declared file size.  If provided, the server
+        verifies it matches the decoded content length.
+    """
+
+    kind: ArtifactKind
+    filename: str = Field(min_length=1)
+    content_base64: str = Field(min_length=1)
+    sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    bytes: int | None = Field(default=None, ge=0)
+
+
 class CalculationIn(SchemaBase):
     """A calculation defined within this upload.
 
@@ -68,6 +98,7 @@ class CalculationIn(SchemaBase):
     :param freq_n_imag: Freq result (if type=freq).
     :param freq_imag_freq_cm1: Freq result (if type=freq).
     :param freq_zpe_hartree: Freq result (if type=freq).
+    :param artifacts: Optional list of file artifacts (logs, inputs, etc.).
     """
 
     key: str = Field(min_length=1)
@@ -89,6 +120,9 @@ class CalculationIn(SchemaBase):
     freq_n_imag: int | None = None
     freq_imag_freq_cm1: float | None = None
     freq_zpe_hartree: float | None = None
+
+    # Optional file artifacts
+    artifacts: list[ArtifactIn] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
