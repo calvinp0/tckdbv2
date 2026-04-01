@@ -25,10 +25,7 @@ if TYPE_CHECKING:
 
 
 class Thermo(Base, TimestampMixin, CreatedByMixin):
-    """Thermochemistry records for a species entry.
-
-    Dedupe uses the provenance tuple with PostgreSQL `NULLS NOT DISTINCT`.
-    """
+    """Thermochemistry records for a species entry."""
 
     __tablename__ = "thermo"
 

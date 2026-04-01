@@ -58,10 +58,8 @@ def test_persist_conformer_upload_creates_expected_rows(db_engine) -> None:
             )
             assert stored_observation is not None
 
-            calculation = session.scalar(
-                select(Calculation).where(Calculation.id == observation.calculation_id)
-            )
-            assert calculation is not None
+            assert len(observation.calculations) >= 1
+            calculation = observation.calculations[0]
             assert calculation.species_entry_id is not None
 
             geometry_link = session.scalar(
@@ -109,12 +107,8 @@ def test_persist_conformer_upload_reuses_species_entry_and_labeled_group(
                     ConformerGroup.id == second.conformer_group_id
                 )
             )
-            first_calc = session.scalar(
-                select(Calculation).where(Calculation.id == first.calculation_id)
-            )
-            second_calc = session.scalar(
-                select(Calculation).where(Calculation.id == second.calculation_id)
-            )
+            first_calc = first.calculations[0]
+            second_calc = second.calculations[0]
 
             assert first_group is not None
             assert second_group is not None
@@ -169,10 +163,8 @@ def test_persist_conformer_upload_creates_linked_statmech_record(db_engine) -> N
         with session.begin():
             observation = persist_conformer_upload(session, request)
 
-            calculation = session.scalar(
-                select(Calculation).where(Calculation.id == observation.calculation_id)
-            )
-            assert calculation is not None
+            assert len(observation.calculations) >= 1
+            calculation = observation.calculations[0]
             assert calculation.species_entry_id is not None
 
             statmech = session.scalar(
@@ -235,11 +227,8 @@ def test_conformer_upload_with_additional_calculations(db_engine) -> None:
     with Session(db_engine) as session, session.begin():
         observation = persist_conformer_upload(session, request)
 
-        species_entry_id = session.scalar(
-            select(Calculation.species_entry_id).where(
-                Calculation.id == observation.calculation_id
-            )
-        )
+        primary_calc = observation.calculations[0]
+        species_entry_id = primary_calc.species_entry_id
 
         # 3 calculations total attached to the species entry
         calcs = session.scalars(
@@ -254,7 +243,7 @@ def test_conformer_upload_with_additional_calculations(db_engine) -> None:
         sp_calc = next(c for c in calcs if c.type == CalculationType.sp)
 
         # Primary calc is the opt (linked to the observation)
-        assert observation.calculation_id == opt_calc.id
+        assert opt_calc.conformer_observation_id == observation.id
 
         # Freq result
         freq_result = session.get(CalculationFreqResult, freq_calc.id)

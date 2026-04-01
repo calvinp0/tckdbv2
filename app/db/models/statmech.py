@@ -33,11 +33,7 @@ if TYPE_CHECKING:
 
 
 class Statmech(Base, TimestampMixin, CreatedByMixin):
-    """Statistical mechanics interpretation layer for a species entry.
-
-    Dedupe uses the provenance/treatment tuple with PostgreSQL
-    `NULLS NOT DISTINCT`.
-    """
+    """Statistical mechanics interpretation layer for a species entry."""
 
     __tablename__ = "statmech"
 

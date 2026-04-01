@@ -239,7 +239,6 @@ def persist_computed_reaction_upload(
             )
             observation = ConformerObservation(
                 conformer_group_id=conformer_group.id,
-                calculation_id=calculation.id,
                 scientific_origin=conf.scientific_origin,
                 note=conf.note,
                 created_by=created_by,

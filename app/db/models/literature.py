@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import BigInteger, Integer, Text
+from sqlalchemy import BigInteger, Index, Integer, Text, text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -41,4 +41,15 @@ class Literature(Base, TimestampMixin):
         back_populates="literature",
         cascade="all, delete-orphan",
         order_by="LiteratureAuthor.author_order",
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_literature_doi_normalized",
+            text("lower(regexp_replace(doi, '^https?://(dx\\.)?doi\\.org/', ''))"),
+        ),
+        Index(
+            "ix_literature_isbn_normalized",
+            text("regexp_replace(isbn, '[- ]', '', 'g')"),
+        ),
     )

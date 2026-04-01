@@ -230,20 +230,21 @@ def persist_network_pdep_upload(
                 smiles=sp.species_entry.smiles,
                 xyz_atoms=parsed.atoms,
             )
-            session.add(
-                ConformerObservation(
-                    conformer_group_id=conformer_group.id,
-                    calculation_id=calculation.id,
-                    scientific_origin=conf.scientific_origin,
-                    note=conf.note,
-                    created_by=created_by,
-                    assignment_scheme_id=scheme.id if scheme else None,
-                    torsion_fingerprint_json=(
-                        fingerprint.to_dict() if fingerprint else None
-                    ),
-                )
+            observation = ConformerObservation(
+                conformer_group_id=conformer_group.id,
+                scientific_origin=conf.scientific_origin,
+                note=conf.note,
+                created_by=created_by,
+                assignment_scheme_id=scheme.id if scheme else None,
+                torsion_fingerprint_json=(
+                    fingerprint.to_dict() if fingerprint else None
+                ),
             )
+            session.add(observation)
             session.flush()
+
+            # Anchor the calculation to this conformer observation
+            calculation.conformer_observation_id = observation.id
 
     # ------------------------------------------------------------------
     # 3. Process species-level additional calculations (sp, freq, etc.)

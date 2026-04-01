@@ -40,7 +40,6 @@ class ConformerGroupRead(ConformerGroupBase, TimestampedCreatedByReadSchema):
 
 class ConformerObservationBase(BaseModel):
     conformer_group_id: int
-    calculation_id: int
     assignment_scheme_id: int | None = None
     scientific_origin: ScientificOriginKind = ScientificOriginKind.computed
     note: str | None = Field(default=None, description="Custom note provided by user")
@@ -52,7 +51,6 @@ class ConformerObservationCreate(ConformerObservationBase, SchemaBase):
 
 class ConformerObservationUpdate(SchemaBase):
     conformer_group_id: int | None = None
-    calculation_id: int | None = None
     assignment_scheme_id: int | None = None
     scientific_origin: ScientificOriginKind | None = None
     note: str | None = None

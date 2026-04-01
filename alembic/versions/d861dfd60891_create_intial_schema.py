@@ -116,6 +116,18 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_literature'))
     )
+    op.execute("""
+        CREATE INDEX ix_literature_doi_normalized
+        ON literature (
+            lower(regexp_replace(doi, '^https?://(dx\\.)?doi\\.org/', ''))
+        )
+    """)
+    op.execute("""
+        CREATE INDEX ix_literature_isbn_normalized
+        ON literature (
+            regexp_replace(isbn, '[- ]', '', 'g')
+        )
+    """)
     op.create_table('reaction_family',
     sa.Column('id', sa.BigInteger(), nullable=False),
     sa.Column('name', sa.Text(), nullable=False),
@@ -957,7 +969,6 @@ def upgrade() -> None:
     op.create_table('conformer_observation',
     sa.Column('id', sa.BigInteger(), nullable=False),
     sa.Column('conformer_group_id', sa.BigInteger(), nullable=False),
-    sa.Column('calculation_id', sa.BigInteger(), nullable=False),
     sa.Column('assignment_scheme_id', sa.BigInteger(), nullable=True),
     sa.Column('scientific_origin', sa.Enum('computed', 'experimental', 'estimated', name='scientific_origin_kind'), server_default='computed', nullable=False),
     sa.Column('note', sa.Text(), nullable=True),
@@ -965,11 +976,9 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.Column('created_by', sa.BigInteger(), nullable=True),
     sa.ForeignKeyConstraint(['assignment_scheme_id'], ['conformer_assignment_scheme.id'], name=op.f('fk_conformer_observation_assignment_scheme_id_conformer_assignment_scheme'), initially='IMMEDIATE', deferrable=True),
-    sa.ForeignKeyConstraint(['calculation_id'], ['calculation.id'], name=op.f('fk_conformer_observation_calculation_id_calculation'), initially='IMMEDIATE', deferrable=True),
     sa.ForeignKeyConstraint(['conformer_group_id'], ['conformer_group.id'], name=op.f('fk_conformer_observation_conformer_group_id_conformer_group'), initially='IMMEDIATE', deferrable=True),
     sa.ForeignKeyConstraint(['created_by'], ['app_user.id'], name=op.f('fk_conformer_observation_created_by_app_user'), initially='IMMEDIATE', deferrable=True),
-    sa.PrimaryKeyConstraint('id', name=op.f('pk_conformer_observation')),
-    sa.UniqueConstraint('calculation_id', name=op.f('uq_conformer_observation_calculation_id'))
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_conformer_observation'))
     )
     op.create_index('ix_conformer_observation_conformer_group_id', 'conformer_observation', ['conformer_group_id'], unique=False)
     # Deferred FK: calculation.conformer_observation_id → conformer_observation.id
@@ -1254,6 +1263,8 @@ def downgrade() -> None:
     op.drop_table('energy_correction_scheme_atom_param')
     op.drop_index('ix_conformer_group_species_entry_id', table_name='conformer_group')
     op.drop_table('conformer_group')
+    op.drop_index('uq_frequency_scale_factor_identity', table_name='frequency_scale_factor', postgresql_nulls_not_distinct=True)
+    op.drop_table('frequency_scale_factor')
     op.drop_index('uq_workflow_tool_release_workflow_tool_id', table_name='workflow_tool_release', postgresql_nulls_not_distinct=True)
     op.drop_table('workflow_tool_release')
     op.drop_index('ix_species_entry_species_id', table_name='species_entry')
@@ -1262,8 +1273,6 @@ def downgrade() -> None:
     op.drop_table('software_release')
     op.drop_table('literature_author')
     op.drop_table('geometry_atom')
-    op.drop_index('uq_frequency_scale_factor_lot_kind_lit', table_name='frequency_scale_factor', postgresql_nulls_not_distinct=True)
-    op.drop_table('frequency_scale_factor')
     op.drop_index('uq_energy_correction_scheme_kind_name_lot_version', table_name='energy_correction_scheme', postgresql_nulls_not_distinct=True)
     op.drop_table('energy_correction_scheme')
     op.drop_table('conformer_assignment_scheme')
@@ -1272,6 +1281,8 @@ def downgrade() -> None:
     op.drop_table('species')
     op.drop_table('software')
     op.drop_table('reaction_family')
+    op.drop_index('ix_literature_isbn_normalized', table_name='literature')
+    op.drop_index('ix_literature_doi_normalized', table_name='literature')
     op.drop_table('literature')
     op.drop_table('level_of_theory')
     op.drop_table('geometry')

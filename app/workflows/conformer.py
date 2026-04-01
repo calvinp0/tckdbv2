@@ -84,7 +84,6 @@ def persist_conformer_upload(
     )
     observation = ConformerObservation(
         conformer_group_id=conformer_group.id,
-        calculation_id=calculation.id,
         scientific_origin=request.scientific_origin,
         note=request.note,
         created_by=created_by,

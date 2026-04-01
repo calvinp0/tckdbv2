@@ -32,6 +32,7 @@ from app.db.models.common import (
 from app.db.types import RDKitMol
 
 if TYPE_CHECKING:
+    from app.db.models.app_user import AppUser
     from app.db.models.calculation import Calculation
     from app.db.models.reaction import ReactionParticipant
     from app.db.models.statmech import Statmech
@@ -247,12 +248,6 @@ class ConformerObservation(Base, TimestampMixin, CreatedByMixin):
         nullable=False,
     )
 
-    calculation_id: Mapped[int] = mapped_column(
-        BigInteger,
-        ForeignKey("calculation.id", deferrable=True, initially="IMMEDIATE"),
-        nullable=False,
-    )
-
     assignment_scheme_id: Mapped[Optional[int]] = mapped_column(
         BigInteger,
         ForeignKey(
@@ -278,15 +273,15 @@ class ConformerObservation(Base, TimestampMixin, CreatedByMixin):
     conformer_group: Mapped["ConformerGroup"] = relationship(
         back_populates="observations"
     )
-    calculation: Mapped["Calculation"] = relationship(
-        foreign_keys="ConformerObservation.calculation_id",
+    calculations: Mapped[list["Calculation"]] = relationship(
+        back_populates="conformer_observation",
+        foreign_keys="Calculation.conformer_observation_id",
     )
     assignment_scheme: Mapped[Optional["ConformerAssignmentScheme"]] = relationship(
         back_populates="observations"
     )
 
     __table_args__ = (
-        UniqueConstraint("calculation_id"),
         Index("ix_conformer_observation_conformer_group_id", "conformer_group_id"),
     )
 
@@ -419,6 +414,7 @@ class SpeciesEntryReview(Base, TimestampMixin):
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     species_entry: Mapped["SpeciesEntry"] = relationship(back_populates="reviews")
+    user: Mapped["AppUser"] = relationship()
 
     __table_args__ = (
         UniqueConstraint(

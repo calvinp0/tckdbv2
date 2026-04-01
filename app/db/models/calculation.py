@@ -38,6 +38,7 @@ from app.db.models.common import (
 if TYPE_CHECKING:
     from app.db.models.geometry import Geometry
     from app.db.models.level_of_theory import LevelOfTheory
+    from app.db.models.literature import Literature
     from app.db.models.software import SoftwareRelease
     from app.db.models.species import ConformerObservation, SpeciesEntry
     from app.db.models.transition_state import TransitionStateEntry
@@ -124,7 +125,9 @@ class Calculation(Base, TimestampMixin, CreatedByMixin):
         back_populates="calculations"
     )
     lot: Mapped[Optional["LevelOfTheory"]] = relationship(back_populates="calculations")
+    literature: Mapped[Optional["Literature"]] = relationship()
     conformer_observation: Mapped[Optional["ConformerObservation"]] = relationship(
+        back_populates="calculations",
         foreign_keys=[conformer_observation_id],
     )
 
