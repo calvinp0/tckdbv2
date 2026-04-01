@@ -197,22 +197,6 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id', name=op.f('pk_energy_correction_scheme'))
     )
     op.create_index('uq_energy_correction_scheme_kind_name_lot_version', 'energy_correction_scheme', ['kind', 'name', 'level_of_theory_id', 'version'], unique=True, postgresql_nulls_not_distinct=True)
-    op.create_table('frequency_scale_factor',
-    sa.Column('id', sa.BigInteger(), nullable=False),
-    sa.Column('level_of_theory_id', sa.BigInteger(), nullable=False),
-    sa.Column('scale_kind', sa.Enum('fundamental', 'zpe', 'enthalpy', 'entropy', 'heat_capacity', name='frequency_scale_kind'), nullable=False),
-    sa.Column('value', sa.Double(), nullable=False),
-    sa.Column('source_literature_id', sa.BigInteger(), nullable=True),
-    sa.Column('note', sa.Text(), nullable=True),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
-    sa.Column('created_by', sa.BigInteger(), nullable=True),
-    sa.CheckConstraint('value > 0', name=op.f('ck_frequency_scale_factor_value_gt_0')),
-    sa.ForeignKeyConstraint(['created_by'], ['app_user.id'], name=op.f('fk_frequency_scale_factor_created_by_app_user'), initially='IMMEDIATE', deferrable=True),
-    sa.ForeignKeyConstraint(['level_of_theory_id'], ['level_of_theory.id'], name=op.f('fk_frequency_scale_factor_level_of_theory_id_level_of_theory'), initially='IMMEDIATE', deferrable=True),
-    sa.ForeignKeyConstraint(['source_literature_id'], ['literature.id'], name=op.f('fk_frequency_scale_factor_source_literature_id_literature'), initially='IMMEDIATE', deferrable=True),
-    sa.PrimaryKeyConstraint('id', name=op.f('pk_frequency_scale_factor'))
-    )
-    op.create_index('uq_frequency_scale_factor_lot_kind_lit', 'frequency_scale_factor', ['level_of_theory_id', 'scale_kind', 'source_literature_id'], unique=True, postgresql_nulls_not_distinct=True)
     op.create_table('geometry_atom',
     sa.Column('geometry_id', sa.BigInteger(), nullable=False),
     sa.Column('atom_index', sa.Integer(), nullable=False),
@@ -279,6 +263,26 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id', name=op.f('pk_workflow_tool_release'))
     )
     op.create_index('uq_workflow_tool_release_workflow_tool_id', 'workflow_tool_release', ['workflow_tool_id', 'version', 'git_commit'], unique=True, postgresql_nulls_not_distinct=True)
+    op.create_table('frequency_scale_factor',
+    sa.Column('id', sa.BigInteger(), nullable=False),
+    sa.Column('level_of_theory_id', sa.BigInteger(), nullable=False),
+    sa.Column('software_id', sa.BigInteger(), nullable=True),
+    sa.Column('scale_kind', sa.Enum('fundamental', 'zpe', 'enthalpy', 'entropy', 'heat_capacity', name='frequency_scale_kind'), nullable=False),
+    sa.Column('value', sa.Double(), nullable=False),
+    sa.Column('source_literature_id', sa.BigInteger(), nullable=True),
+    sa.Column('workflow_tool_release_id', sa.BigInteger(), nullable=True),
+    sa.Column('note', sa.Text(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_by', sa.BigInteger(), nullable=True),
+    sa.CheckConstraint('value > 0', name=op.f('ck_frequency_scale_factor_value_gt_0')),
+    sa.ForeignKeyConstraint(['created_by'], ['app_user.id'], name=op.f('fk_frequency_scale_factor_created_by_app_user'), initially='IMMEDIATE', deferrable=True),
+    sa.ForeignKeyConstraint(['level_of_theory_id'], ['level_of_theory.id'], name=op.f('fk_frequency_scale_factor_level_of_theory_id_level_of_theory'), initially='IMMEDIATE', deferrable=True),
+    sa.ForeignKeyConstraint(['software_id'], ['software.id'], name=op.f('fk_frequency_scale_factor_software_id_software'), initially='IMMEDIATE', deferrable=True),
+    sa.ForeignKeyConstraint(['source_literature_id'], ['literature.id'], name=op.f('fk_frequency_scale_factor_source_literature_id_literature'), initially='IMMEDIATE', deferrable=True),
+    sa.ForeignKeyConstraint(['workflow_tool_release_id'], ['workflow_tool_release.id'], name=op.f('fk_frequency_scale_factor_workflow_tool_release_id_workflow_tool_release'), initially='IMMEDIATE', deferrable=True),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_frequency_scale_factor'))
+    )
+    op.create_index('uq_frequency_scale_factor_identity', 'frequency_scale_factor', ['level_of_theory_id', 'software_id', 'scale_kind', 'value', 'source_literature_id', 'workflow_tool_release_id'], unique=True, postgresql_nulls_not_distinct=True)
     op.create_table('conformer_group',
     sa.Column('id', sa.BigInteger(), nullable=False),
     sa.Column('species_entry_id', sa.BigInteger(), nullable=False),
@@ -374,13 +378,14 @@ def upgrade() -> None:
     sa.Column('is_linear', sa.Boolean(), nullable=True),
     sa.Column('rigid_rotor_kind', sa.Enum('atom', 'linear', 'spherical_top', 'symmetric_top', 'asymmetric_top', name='rigid_rotor_kind'), nullable=True),
     sa.Column('statmech_treatment', sa.Enum('rrho', 'rrho_1d', 'rrho_nd', 'rrho_1d_nd', 'rrho_ad', 'rrao', name='statmech_treatment_kind'), nullable=True),
-    sa.Column('freq_scale_factor', sa.Float(), nullable=True),
+    sa.Column('frequency_scale_factor_id', sa.BigInteger(), nullable=True),
     sa.Column('uses_projected_frequencies', sa.Boolean(), nullable=True),
     sa.Column('note', sa.Text(), nullable=True),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.Column('created_by', sa.BigInteger(), nullable=True),
     sa.CheckConstraint('external_symmetry IS NULL OR external_symmetry >= 1', name=op.f('ck_statmech_external_symmetry_ge_1')),
     sa.ForeignKeyConstraint(['created_by'], ['app_user.id'], name=op.f('fk_statmech_created_by_app_user'), initially='IMMEDIATE', deferrable=True),
+    sa.ForeignKeyConstraint(['frequency_scale_factor_id'], ['frequency_scale_factor.id'], name=op.f('fk_statmech_frequency_scale_factor_id_frequency_scale_factor'), initially='IMMEDIATE', deferrable=True),
     sa.ForeignKeyConstraint(['literature_id'], ['literature.id'], name=op.f('fk_statmech_literature_id_literature'), initially='IMMEDIATE', deferrable=True),
     sa.ForeignKeyConstraint(['software_release_id'], ['software_release.id'], name=op.f('fk_statmech_software_release_id_software_release'), initially='IMMEDIATE', deferrable=True),
     sa.ForeignKeyConstraint(['species_entry_id'], ['species_entry.id'], name=op.f('fk_statmech_species_entry_id_species_entry'), initially='IMMEDIATE', deferrable=True),
@@ -467,6 +472,9 @@ def upgrade() -> None:
     sa.Column('a_units', sa.Enum('per_s', 'cm3_mol_s', 'cm3_molecule_s', 'm3_mol_s', 'cm6_mol2_s', 'cm6_molecule2_s', 'm6_mol2_s', name='arrhenius_a_units'), nullable=True),
     sa.Column('n', sa.Double(), nullable=True),
     sa.Column('ea_kj_mol', sa.Double(), nullable=True),
+    sa.Column('d_a', sa.Double(), nullable=True),
+    sa.Column('d_n', sa.Double(), nullable=True),
+    sa.Column('d_ea_kj_mol', sa.Double(), nullable=True),
     sa.Column('tmin_k', sa.Double(), nullable=True),
     sa.Column('tmax_k', sa.Double(), nullable=True),
     sa.Column('degeneracy', sa.Double(), nullable=True),
@@ -1132,6 +1140,25 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id', name=op.f('pk_applied_energy_correction_component'))
     )
 
+    op.create_table(
+        'upload_job',
+        sa.Column('id', postgresql.UUID(as_uuid=False), server_default=sa.text('gen_random_uuid()'), nullable=False),
+        sa.Column('status', sa.Enum('queued', 'processing', 'complete', 'failed', name='upload_job_status'), server_default='queued', nullable=False),
+        sa.Column('kind', sa.Enum('computed_reaction', 'conformer', 'reaction', 'kinetics', 'network', 'network_pdep', 'thermo', 'transition_state', name='upload_job_kind'), nullable=False),
+        sa.Column('payload', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column('created_by', sa.BigInteger(), nullable=True),
+        sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+        sa.Column('started_at', sa.DateTime(), nullable=True),
+        sa.Column('completed_at', sa.DateTime(), nullable=True),
+        sa.Column('result', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('error', sa.Text(), nullable=True),
+        sa.Column('attempts', sa.Integer(), server_default='0', nullable=False),
+        sa.Column('max_attempts', sa.Integer(), server_default='3', nullable=False),
+        sa.ForeignKeyConstraint(['created_by'], ['app_user.id'], name=op.f('fk_upload_job_created_by_app_user'), deferrable=True, initially='IMMEDIATE'),
+        sa.PrimaryKeyConstraint('id', name=op.f('pk_upload_job')),
+    )
+    op.create_index('ix_upload_job_status_created_at', 'upload_job', ['status', 'created_at'], unique=False)
+
     _seed_reaction_families()
 
     # Seed default conformer assignment scheme
@@ -1249,4 +1276,8 @@ def downgrade() -> None:
     op.drop_table('level_of_theory')
     op.drop_table('geometry')
     op.drop_table('author')
+    op.drop_index('ix_upload_job_status_created_at', table_name='upload_job')
+    op.drop_table('upload_job')
+    op.execute("DROP TYPE IF EXISTS upload_job_status")
+    op.execute("DROP TYPE IF EXISTS upload_job_kind")
     op.drop_table('app_user')

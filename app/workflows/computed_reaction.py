@@ -27,6 +27,7 @@ from app.db.models.common import (
     ReactionRole,
 )
 from app.db.models.kinetics import Kinetics, KineticsSourceCalculation
+from app.db.models.statmech import Statmech, StatmechTorsion
 from app.db.models.reaction import ReactionEntry, ReactionEntryStructureParticipant
 from app.db.models.species import ConformerObservation
 from app.db.models.thermo import Thermo, ThermoNASA, ThermoPoint
@@ -43,6 +44,9 @@ from app.services.calculation_resolution import (
     resolve_level_of_theory_ref,
     resolve_software_release_ref,
     resolve_workflow_tool_release_ref,
+)
+from app.services.energy_correction_resolution import (
+    resolve_or_create_freq_scale_factor_ref,
 )
 from app.services.conformer_resolution import resolve_conformer_group
 from app.services.geometry_resolution import resolve_geometry_payload
@@ -204,8 +208,11 @@ def persist_computed_reaction_upload(
     # 1. Resolve species + conformers + calculations
     # ------------------------------------------------------------------
     for sp in request.species:
+        # Use first conformer's XYZ for 3D stereo label derivation
+        first_xyz = sp.conformers[0].geometry.xyz_text if sp.conformers else None
         species_entry = resolve_species_entry(
-            session, sp.species_entry, created_by=created_by
+            session, sp.species_entry, created_by=created_by,
+            xyz_text=first_xyz,
         )
         species_key_to_entry[sp.key] = species_entry
 
@@ -363,6 +370,19 @@ def persist_computed_reaction_upload(
     # ------------------------------------------------------------------
     # 4. Thermo (per species, if provided)
     # ------------------------------------------------------------------
+
+    # Resolve bundle-level provenance once for thermo/statmech/kinetics
+    # analysis_software_release = the code that computed statmech/thermo/kinetics
+    #   (e.g. RMG-Py/Arkane, MESS, MultiWell) — not the ESS (Gaussian/ORCA)
+    bundle_analysis_software_release = (
+        resolve_software_release_ref(session, request.analysis_software_release)
+        if request.analysis_software_release is not None
+        else None
+    )
+    bundle_workflow_tool_release = resolve_workflow_tool_release_ref(
+        session, request.workflow_tool_release
+    )
+
     thermo_ids = []
     for sp in request.species:
         if sp.thermo is not None:
@@ -372,6 +392,16 @@ def persist_computed_reaction_upload(
             thermo = Thermo(
                 species_entry_id=species_entry.id,
                 scientific_origin=t.scientific_origin,
+                software_release_id=(
+                    bundle_analysis_software_release.id
+                    if bundle_analysis_software_release
+                    else None
+                ),
+                workflow_tool_release_id=(
+                    bundle_workflow_tool_release.id
+                    if bundle_workflow_tool_release
+                    else None
+                ),
                 h298_kj_mol=t.h298_kj_mol,
                 s298_j_mol_k=t.s298_j_mol_k,
                 tmin_k=t.tmin_k,
@@ -388,6 +418,60 @@ def persist_computed_reaction_upload(
 
             for pt in t.points:
                 session.add(ThermoPoint(thermo_id=thermo.id, **pt.model_dump()))
+
+    session.flush()
+
+    # ------------------------------------------------------------------
+    # 4b. Statmech (per species, if provided)
+    # ------------------------------------------------------------------
+    statmech_ids = []
+    for sp in request.species:
+        if sp.statmech is not None:
+            species_entry = species_key_to_entry[sp.key]
+            s = sp.statmech
+
+            fsf_id = None
+            if s.freq_scale_factor is not None:
+                fsf = resolve_or_create_freq_scale_factor_ref(
+                    session, s.freq_scale_factor, created_by=created_by
+                )
+                fsf_id = fsf.id
+
+            statmech = Statmech(
+                species_entry_id=species_entry.id,
+                scientific_origin=s.scientific_origin,
+                software_release_id=(
+                    bundle_analysis_software_release.id
+                    if bundle_analysis_software_release
+                    else None
+                ),
+                workflow_tool_release_id=(
+                    bundle_workflow_tool_release.id
+                    if bundle_workflow_tool_release
+                    else None
+                ),
+                is_linear=s.is_linear,
+                rigid_rotor_kind=s.rigid_rotor_kind,
+                external_symmetry=s.external_symmetry,
+                statmech_treatment=s.statmech_treatment,
+                frequency_scale_factor_id=fsf_id,
+                uses_projected_frequencies=s.uses_projected_frequencies,
+                note=s.note,
+                created_by=created_by,
+            )
+            session.add(statmech)
+            session.flush()
+            statmech_ids.append(statmech.id)
+
+            for torsion_in in s.torsions:
+                torsion = StatmechTorsion(
+                    statmech_id=statmech.id,
+                    torsion_index=torsion_in.torsion_index,
+                    symmetry_number=torsion_in.symmetry_number,
+                    treatment_kind=torsion_in.treatment_kind,
+                    dimension=1,
+                )
+                session.add(torsion)
 
     session.flush()
 
@@ -443,16 +527,16 @@ def persist_computed_reaction_upload(
             if kin.reported_ea is not None
             else None
         )
+        d_ea_kj_mol = (
+            convert_ea_to_kj_mol(kin.d_reported_ea, kin.reported_ea_units)
+            if kin.d_reported_ea is not None
+            else None
+        )
 
         # Resolve bundle-level provenance
         literature = (
             resolve_or_create_literature(session, request.literature)
             if request.literature is not None
-            else None
-        )
-        software_release = (
-            resolve_software_release_ref(session, request.software_release)
-            if request.software_release is not None
             else None
         )
         workflow_tool_release = resolve_workflow_tool_release_ref(
@@ -464,7 +548,11 @@ def persist_computed_reaction_upload(
             scientific_origin=kin.scientific_origin,
             model_kind=kin.model_kind,
             literature_id=literature.id if literature else None,
-            software_release_id=software_release.id if software_release else None,
+            software_release_id=(
+                bundle_analysis_software_release.id
+                if bundle_analysis_software_release
+                else None
+            ),
             workflow_tool_release_id=(
                 workflow_tool_release.id if workflow_tool_release else None
             ),
@@ -472,6 +560,9 @@ def persist_computed_reaction_upload(
             a_units=kin.a_units,
             n=kin.n,
             ea_kj_mol=ea_kj_mol,
+            d_a=kin.d_a,
+            d_n=kin.d_n,
+            d_ea_kj_mol=d_ea_kj_mol,
             tmin_k=kin.tmin_k,
             tmax_k=kin.tmax_k,
             tunneling_model=kin.tunneling_model,
@@ -518,6 +609,7 @@ def persist_computed_reaction_upload(
         "transition_state_entry_id": ts_entry.id if ts_entry else None,
         "kinetics_ids": kinetics_ids,
         "thermo_ids": thermo_ids,
+        "statmech_ids": statmech_ids,
         "species_entry_ids": [e.id for e in species_key_to_entry.values()],
         "species_count": len(request.species),
     }

@@ -20,7 +20,7 @@ from app.schemas.fragments.calculation import (
 )
 from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
 from app.schemas.fragments.geometry import GeometryPayload
-from app.schemas.fragments.refs import SoftwareReleaseRef, WorkflowToolReleaseRef
+from app.schemas.fragments.refs import FreqScaleFactorRef, SoftwareReleaseRef, WorkflowToolReleaseRef
 from app.schemas.utils import normalize_optional_text
 from app.schemas.workflows.energy_correction_upload import (
     AppliedEnergyCorrectionUploadPayload,
@@ -49,7 +49,7 @@ class ConformerUploadStatmechPayload(SchemaBase):
     rigid_rotor_kind: RigidRotorKind | None = None
     statmech_treatment: StatmechTreatmentKind | None = None
 
-    freq_scale_factor: float | None = None
+    freq_scale_factor: FreqScaleFactorRef | None = None
     uses_projected_frequencies: bool | None = None
     note: str | None = None
 

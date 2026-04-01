@@ -29,7 +29,9 @@ if TYPE_CHECKING:
     from app.db.models.level_of_theory import LevelOfTheory
     from app.db.models.literature import Literature
     from app.db.models.reaction import ReactionEntry
+    from app.db.models.software import Software
     from app.db.models.species import ConformerObservation, SpeciesEntry
+    from app.db.models.workflow import WorkflowToolRelease
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +178,16 @@ class EnergyCorrectionSchemeComponentParam(Base):
 
 
 class FrequencyScaleFactor(Base, TimestampMixin, CreatedByMixin):
-    """Frequency scale factor keyed by level of theory and scale kind."""
+    """Immutable registry row for one frequency scale factor definition.
+
+    Uniqueness is based on the full identity of the definition — LOT, software,
+    scale kind, value, and provenance source — so two rows can legitimately have
+    the same (LOT, software, scale_kind) with different values if they come from
+    different sources.
+
+    Null ``frequency_scale_factor_id`` on a statmech row means "unknown/not
+    recorded".  A row with ``value = 1.0`` represents explicitly unscaled.
+    """
 
     __tablename__ = "frequency_scale_factor"
 
@@ -186,6 +197,12 @@ class FrequencyScaleFactor(Base, TimestampMixin, CreatedByMixin):
         BigInteger,
         ForeignKey("level_of_theory.id", deferrable=True, initially="IMMEDIATE"),
         nullable=False,
+    )
+    # Software dimension: same LOT in Gaussian vs QChem can yield different factors
+    software_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("software.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=True,
     )
     scale_kind: Mapped[FrequencyScaleKind] = mapped_column(
         SAEnum(FrequencyScaleKind, name="frequency_scale_kind"),
@@ -198,19 +215,31 @@ class FrequencyScaleFactor(Base, TimestampMixin, CreatedByMixin):
         ForeignKey("literature.id", deferrable=True, initially="IMMEDIATE"),
         nullable=True,
     )
+    # Set when the factor was sourced from a workflow tool's data file (e.g. ARC's
+    # freq_scale_factors.yml) rather than directly from a literature paper.
+    workflow_tool_release_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("workflow_tool_release.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=True,
+    )
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
     level_of_theory: Mapped["LevelOfTheory"] = relationship()
+    software: Mapped[Optional["Software"]] = relationship()
     source_literature: Mapped[Optional["Literature"]] = relationship()
+    workflow_tool_release: Mapped[Optional["WorkflowToolRelease"]] = relationship()
 
     __table_args__ = (
         CheckConstraint("value > 0", name="value_gt_0"),
         Index(
-            "uq_frequency_scale_factor_lot_kind_lit",
+            "uq_frequency_scale_factor_identity",
             "level_of_theory_id",
+            "software_id",
             "scale_kind",
+            "value",
             "source_literature_id",
+            "workflow_tool_release_id",
             unique=True,
             postgresql_nulls_not_distinct=True,
         ),

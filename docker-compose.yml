@@ -28,6 +28,28 @@ services:
       timeout: 5s
       retries: 3
 
+  # Optional standalone upload worker.
+  # Activate with: docker compose --profile worker up
+  #
+  # Alternatively, set TCKDB_INLINE_WORKER=true on the api service to run
+  # the worker inside the API process (simpler, but shares CPU).
+  worker:
+    profiles: ["worker"]
+    image: tckdb-api  # build this image the same way as the API service
+    command: >
+      conda run -n tckdb_env python -m app.workers.upload_worker
+    environment:
+      DB_USER: tckdb
+      DB_PASSWORD: tckdb
+      DB_NAME: tckdb_dev
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      TCKDB_INLINE_WORKER: "false"
+    network_mode: host
+    depends_on:
+      - db
+    restart: unless-stopped
+
 volumes:
   tckdb_pgdata:
   tckdb_minio:

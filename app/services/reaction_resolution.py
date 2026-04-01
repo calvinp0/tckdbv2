@@ -6,6 +6,7 @@ from collections import Counter
 from typing import Mapping, Sequence
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models.common import ReactionRole
@@ -136,35 +137,42 @@ def resolve_chem_reaction(
         session.flush()
         return chem_reaction
 
-    chem_reaction = ChemReaction(
-        reversible=reversible,
-        stoichiometry_hash=stoichiometry_hash,
-        reaction_family=resolved_reaction_family,
-        reaction_family_raw=reaction_family_raw,
-        reaction_family_source_note=normalized_source_note,
-    )
-    session.add(chem_reaction)
-    session.flush()
-
-    for species_id, stoichiometry in sorted(reactant_stoichiometry.items()):
-        session.add(
-            ReactionParticipant(
-                reaction_id=chem_reaction.id,
-                species_id=species_id,
-                role=ReactionRole.reactant,
-                stoichiometry=stoichiometry,
+    try:
+        with session.begin_nested():
+            chem_reaction = ChemReaction(
+                reversible=reversible,
+                stoichiometry_hash=stoichiometry_hash,
+                reaction_family=resolved_reaction_family,
+                reaction_family_raw=reaction_family_raw,
+                reaction_family_source_note=normalized_source_note,
             )
+            session.add(chem_reaction)
+            session.flush()
+
+            for species_id, stoichiometry in sorted(reactant_stoichiometry.items()):
+                session.add(
+                    ReactionParticipant(
+                        reaction_id=chem_reaction.id,
+                        species_id=species_id,
+                        role=ReactionRole.reactant,
+                        stoichiometry=stoichiometry,
+                    )
+                )
+
+            for species_id, stoichiometry in sorted(product_stoichiometry.items()):
+                session.add(
+                    ReactionParticipant(
+                        reaction_id=chem_reaction.id,
+                        species_id=species_id,
+                        role=ReactionRole.product,
+                        stoichiometry=stoichiometry,
+                    )
+                )
+
+            session.flush()
+    except IntegrityError:
+        chem_reaction = session.scalar(
+            select(ChemReaction).where(ChemReaction.stoichiometry_hash == stoichiometry_hash)
         )
 
-    for species_id, stoichiometry in sorted(product_stoichiometry.items()):
-        session.add(
-            ReactionParticipant(
-                reaction_id=chem_reaction.id,
-                species_id=species_id,
-                role=ReactionRole.product,
-                stoichiometry=stoichiometry,
-            )
-        )
-
-    session.flush()
     return chem_reaction

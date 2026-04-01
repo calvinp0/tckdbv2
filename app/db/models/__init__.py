@@ -19,6 +19,7 @@ from . import (
     thermo,
     transition_state,
     transport,
+    upload_job,
     workflow,
 )
 
@@ -41,5 +42,6 @@ __all__ = [
     "thermo",
     "transition_state",
     "transport",
+    "upload_job",
     "workflow",
 ]

@@ -23,6 +23,9 @@ class ArkaneKinetics:
     ea_units: str  # e.g. "kJ/mol"
     tmin_k: float
     tmax_k: float
+    d_a: float | None = None    # multiplicative uncertainty: A *|/ d_a
+    d_n: float | None = None    # additive uncertainty: n +/- d_n
+    d_ea: float | None = None   # additive uncertainty: Ea +/- d_ea (same units as ea_units)
     comment: str | None = None
 
 
@@ -75,12 +78,24 @@ def parse_arkane_kinetics(text: str) -> ArkaneKinetics:
     label_m = re.search(r"label\s*=\s*['\"](.+?)['\"]", block_text)
     label = label_m.group(1) if label_m else ""
 
+    # Helper: match a parameter tuple that may span multiple lines, e.g.
+    #   A = (500290, 'cm^3/(mol*s)')        — single-line
+    #   Ea = (                               — multi-line
+    #       -2.08113,
+    #       'kJ/mol',
+    #   )
+    def _parse_tuple_param(name: str) -> tuple[float, str] | None:
+        pattern = rf"{name}\s*=\s*\(\s*([-\d.eE+]+)\s*,\s*['\"](.+?)['\"]\s*,?\s*\)"
+        m = re.search(pattern, block_text, re.DOTALL)
+        if m:
+            return float(m.group(1)), m.group(2)
+        return None
+
     # Extract A = (value, 'units')
-    a_m = re.search(r"A\s*=\s*\(\s*([-\d.eE+]+)\s*,\s*['\"](.+?)['\"]\s*\)", block_text)
-    if not a_m:
+    a_parsed = _parse_tuple_param("A")
+    if not a_parsed:
         raise ValueError("Could not parse A parameter from kinetics block.")
-    a_val = float(a_m.group(1))
-    a_units = a_m.group(2)
+    a_val, a_units = a_parsed
 
     # Extract n = value
     n_m = re.search(r"\bn\s*=\s*([-\d.eE+]+)", block_text)
@@ -89,23 +104,35 @@ def parse_arkane_kinetics(text: str) -> ArkaneKinetics:
     n_val = float(n_m.group(1))
 
     # Extract Ea = (value, 'units')
-    ea_m = re.search(r"Ea\s*=\s*\(\s*([-\d.eE+]+)\s*,\s*['\"](.+?)['\"]\s*\)", block_text)
-    if not ea_m:
+    ea_parsed = _parse_tuple_param("Ea")
+    if not ea_parsed:
         raise ValueError("Could not parse Ea parameter from kinetics block.")
-    ea_val = float(ea_m.group(1))
-    ea_units = ea_m.group(2)
+    ea_val, ea_units = ea_parsed
 
-    # Extract Tmin = (value, 'K')
-    tmin_m = re.search(r"Tmin\s*=\s*\(\s*([-\d.eE+]+)\s*,\s*['\"]K['\"]\s*\)", block_text)
-    tmin_k = float(tmin_m.group(1)) if tmin_m else 300.0
+    # Extract Tmin / Tmax
+    tmin_parsed = _parse_tuple_param("Tmin")
+    tmin_k = tmin_parsed[0] if tmin_parsed else 300.0
 
-    # Extract Tmax = (value, 'K')
-    tmax_m = re.search(r"Tmax\s*=\s*\(\s*([-\d.eE+]+)\s*,\s*['\"]K['\"]\s*\)", block_text)
-    tmax_k = float(tmax_m.group(1)) if tmax_m else 3000.0
+    tmax_parsed = _parse_tuple_param("Tmax")
+    tmax_k = tmax_parsed[0] if tmax_parsed else 3000.0
 
     # Extract comment
     comment_m = re.search(r"comment\s*=\s*['\"](.+?)['\"]", block_text, re.DOTALL)
     comment = comment_m.group(1).strip() if comment_m else None
+
+    # Extract uncertainties from comment string
+    # Format: "dA = *|/ 1.13881, dn = +|- 0.016931, dEa = +|- 0.0968239 kJ/mol"
+    d_a = d_n = d_ea = None
+    if comment:
+        da_m = re.search(r"dA\s*=\s*\*\|/\s*([\d.eE+-]+)", comment)
+        dn_m = re.search(r"dn\s*=\s*\+\|-\s*([\d.eE+-]+)", comment)
+        dea_m = re.search(r"dEa\s*=\s*\+\|-\s*([\d.eE+-]+)", comment)
+        if da_m:
+            d_a = float(da_m.group(1))
+        if dn_m:
+            d_n = float(dn_m.group(1))
+        if dea_m:
+            d_ea = float(dea_m.group(1))
 
     return ArkaneKinetics(
         label=label,
@@ -116,6 +143,9 @@ def parse_arkane_kinetics(text: str) -> ArkaneKinetics:
         ea_units=ea_units,
         tmin_k=tmin_k,
         tmax_k=tmax_k,
+        d_a=d_a,
+        d_n=d_n,
+        d_ea=d_ea,
         comment=comment,
     )
 

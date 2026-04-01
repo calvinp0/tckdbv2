@@ -19,13 +19,20 @@ from app.db.models.energy_correction import (
     EnergyCorrectionSchemeComponentParam,
     FrequencyScaleFactor,
 )
+from app.db.models.software import Software
+from app.db.models.workflow import WorkflowToolRelease
+from app.schemas.fragments.refs import FreqScaleFactorRef
 from app.schemas.workflows.energy_correction_upload import (
     AppliedEnergyCorrectionUploadPayload,
     EnergyCorrectionSchemeRef,
-    FrequencyScaleFactorRef,
+    FrequencyScaleFactorRef as LegacyFrequencyScaleFactorRef,
 )
-from app.services.calculation_resolution import resolve_level_of_theory_ref
+from app.services.calculation_resolution import (
+    resolve_level_of_theory_ref,
+    resolve_workflow_tool_release_ref,
+)
 from app.services.literature_resolution import resolve_or_create_literature
+from app.services.software_resolution import resolve_software
 
 # ---------------------------------------------------------------------------
 # Scheme resolution
@@ -127,13 +134,13 @@ def resolve_or_create_scheme(
 
 def resolve_or_create_frequency_scale_factor(
     session: Session,
-    ref: FrequencyScaleFactorRef,
+    ref: LegacyFrequencyScaleFactorRef,
     *,
     created_by: int | None = None,
 ) -> FrequencyScaleFactor:
-    """Resolve or create a frequency scale factor.
+    """Resolve or create a frequency scale factor (energy-correction upload path).
 
-    Dedup key: (level_of_theory_id, scale_kind, source_literature_id).
+    Dedup key: full identity (lot, software=null, scale_kind, value, lit, wtr=null).
 
     :param session: Active SQLAlchemy session.
     :param ref: Upload-facing frequency scale factor reference.
@@ -149,30 +156,121 @@ def resolve_or_create_frequency_scale_factor(
     )
     lit_id = literature.id if literature else None
 
+    return _resolve_or_create_fsf_row(
+        session,
+        level_of_theory_id=lot.id,
+        software_id=None,
+        scale_kind=ref.scale_kind,
+        value=ref.value,
+        source_literature_id=lit_id,
+        workflow_tool_release_id=None,
+        note=ref.note,
+        created_by=created_by,
+    )
+
+
+def resolve_or_create_freq_scale_factor_ref(
+    session: Session,
+    ref: FreqScaleFactorRef,
+    *,
+    created_by: int | None = None,
+) -> FrequencyScaleFactor:
+    """Resolve or create a frequency scale factor from a statmech upload ref.
+
+    Dedup key: full identity (lot, software, scale_kind, value, lit, workflow_tool_release).
+
+    :param session: Active SQLAlchemy session.
+    :param ref: Upload-facing freq scale factor ref (from refs.py).
+    :param created_by: Optional application user id.
+    :returns: Existing or newly created FSF row.
+    """
+    lot = resolve_level_of_theory_ref(session, ref.level_of_theory)
+
+    software_id = None
+    if ref.software is not None:
+        sw = resolve_software(session, ref.software.name)
+        software_id = sw.id
+
+    wtr_id = None
+    if ref.workflow_tool_release is not None:
+        wtr = resolve_workflow_tool_release_ref(session, ref.workflow_tool_release)
+        wtr_id = wtr.id
+
+    return _resolve_or_create_fsf_row(
+        session,
+        level_of_theory_id=lot.id,
+        software_id=software_id,
+        scale_kind=ref.scale_kind,
+        value=ref.value,
+        source_literature_id=None,
+        workflow_tool_release_id=wtr_id,
+        note=ref.note,
+        created_by=created_by,
+    )
+
+
+def _resolve_or_create_fsf_row(
+    session: Session,
+    *,
+    level_of_theory_id: int,
+    software_id: int | None,
+    scale_kind,
+    value: float,
+    source_literature_id: int | None,
+    workflow_tool_release_id: int | None,
+    note: str | None,
+    created_by: int | None,
+) -> FrequencyScaleFactor:
+    """Core dedup-or-create logic for FrequencyScaleFactor rows.
+
+    Uniqueness is on the full identity of the definition (all fields).
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    def _match(col, val):
+        return col == val if val is not None else col.is_(None)
+
     existing = session.scalar(
         select(FrequencyScaleFactor).where(
-            FrequencyScaleFactor.level_of_theory_id == lot.id,
-            FrequencyScaleFactor.scale_kind == ref.scale_kind,
-            (
-                FrequencyScaleFactor.source_literature_id == lit_id
-                if lit_id is not None
-                else FrequencyScaleFactor.source_literature_id.is_(None)
-            ),
+            FrequencyScaleFactor.level_of_theory_id == level_of_theory_id,
+            _match(FrequencyScaleFactor.software_id, software_id),
+            FrequencyScaleFactor.scale_kind == scale_kind,
+            FrequencyScaleFactor.value == value,
+            _match(FrequencyScaleFactor.source_literature_id, source_literature_id),
+            _match(FrequencyScaleFactor.workflow_tool_release_id, workflow_tool_release_id),
         )
     )
     if existing is not None:
         return existing
 
-    fsf = FrequencyScaleFactor(
-        level_of_theory_id=lot.id,
-        scale_kind=ref.scale_kind,
-        value=ref.value,
-        source_literature_id=lit_id,
-        note=ref.note,
-        created_by=created_by,
-    )
-    session.add(fsf)
-    session.flush()
+    try:
+        with session.begin_nested():
+            fsf = FrequencyScaleFactor(
+                level_of_theory_id=level_of_theory_id,
+                software_id=software_id,
+                scale_kind=scale_kind,
+                value=value,
+                source_literature_id=source_literature_id,
+                workflow_tool_release_id=workflow_tool_release_id,
+                note=note,
+                created_by=created_by,
+            )
+            session.add(fsf)
+            session.flush()
+    except IntegrityError:
+        fsf = session.scalar(
+            select(FrequencyScaleFactor).where(
+                FrequencyScaleFactor.level_of_theory_id == level_of_theory_id,
+                _match(FrequencyScaleFactor.software_id, software_id),
+                FrequencyScaleFactor.scale_kind == scale_kind,
+                FrequencyScaleFactor.value == value,
+                _match(FrequencyScaleFactor.source_literature_id, source_literature_id),
+                _match(
+                    FrequencyScaleFactor.workflow_tool_release_id,
+                    workflow_tool_release_id,
+                ),
+            )
+        )
     return fsf
 
 

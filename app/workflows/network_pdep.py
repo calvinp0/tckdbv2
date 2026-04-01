@@ -191,8 +191,10 @@ def persist_network_pdep_upload(
     # 1. Resolve species
     # ------------------------------------------------------------------
     for sp in request.species:
+        first_xyz = sp.conformers[0].geometry.xyz_text if sp.conformers else None
         species_entry = resolve_species_entry(
-            session, sp.species_entry, created_by=created_by
+            session, sp.species_entry, created_by=created_by,
+            xyz_text=first_xyz,
         )
         species_key_to_entry[sp.key] = species_entry
 

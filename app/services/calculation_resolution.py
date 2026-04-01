@@ -4,6 +4,7 @@ import hashlib
 import json
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
@@ -86,9 +87,15 @@ def resolve_workflow_tool_release_ref(
         select(WorkflowTool).where(WorkflowTool.name == ref.name)
     )
     if workflow_tool is None:
-        workflow_tool = WorkflowTool(name=ref.name)
-        session.add(workflow_tool)
-        session.flush()
+        try:
+            with session.begin_nested():
+                workflow_tool = WorkflowTool(name=ref.name)
+                session.add(workflow_tool)
+                session.flush()
+        except IntegrityError:
+            workflow_tool = session.scalar(
+                select(WorkflowTool).where(WorkflowTool.name == ref.name)
+            )
 
     release = session.scalar(
         select(WorkflowToolRelease).where(
@@ -98,15 +105,25 @@ def resolve_workflow_tool_release_ref(
         )
     )
     if release is None:
-        release = WorkflowToolRelease(
-            workflow_tool_id=workflow_tool.id,
-            version=ref.version,
-            git_commit=ref.git_commit,
-            release_date=ref.release_date,
-            notes=ref.notes,
-        )
-        session.add(release)
-        session.flush()
+        try:
+            with session.begin_nested():
+                release = WorkflowToolRelease(
+                    workflow_tool_id=workflow_tool.id,
+                    version=ref.version,
+                    git_commit=ref.git_commit,
+                    release_date=ref.release_date,
+                    notes=ref.notes,
+                )
+                session.add(release)
+                session.flush()
+        except IntegrityError:
+            release = session.scalar(
+                select(WorkflowToolRelease).where(
+                    WorkflowToolRelease.workflow_tool_id == workflow_tool.id,
+                    _null_safe_equals(WorkflowToolRelease.version, ref.version),
+                    _null_safe_equals(WorkflowToolRelease.git_commit, ref.git_commit),
+                )
+            )
 
     return release
 
@@ -127,19 +144,25 @@ def resolve_level_of_theory_ref(
         select(LevelOfTheory).where(LevelOfTheory.lot_hash == lot_hash)
     )
     if level_of_theory is None:
-        level_of_theory = LevelOfTheory(
-            method=ref.method,
-            basis=ref.basis,
-            aux_basis=ref.aux_basis,
-            cabs_basis=ref.cabs_basis,
-            dispersion=ref.dispersion,
-            solvent=ref.solvent,
-            solvent_model=ref.solvent_model,
-            keywords=ref.keywords,
-            lot_hash=lot_hash,
-        )
-        session.add(level_of_theory)
-        session.flush()
+        try:
+            with session.begin_nested():
+                level_of_theory = LevelOfTheory(
+                    method=ref.method,
+                    basis=ref.basis,
+                    aux_basis=ref.aux_basis,
+                    cabs_basis=ref.cabs_basis,
+                    dispersion=ref.dispersion,
+                    solvent=ref.solvent,
+                    solvent_model=ref.solvent_model,
+                    keywords=ref.keywords,
+                    lot_hash=lot_hash,
+                )
+                session.add(level_of_theory)
+                session.flush()
+        except IntegrityError:
+            level_of_theory = session.scalar(
+                select(LevelOfTheory).where(LevelOfTheory.lot_hash == lot_hash)
+            )
 
     return level_of_theory
 

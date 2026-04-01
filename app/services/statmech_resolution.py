@@ -17,6 +17,7 @@ from app.db.models.statmech import (
 )
 from app.schemas.workflows.conformer_upload import ConformerUploadStatmechPayload
 from app.services.calculation_resolution import resolve_workflow_tool_release_ref
+from app.services.energy_correction_resolution import resolve_or_create_freq_scale_factor_ref
 from app.services.software_resolution import resolve_software_release_ref
 
 
@@ -50,6 +51,13 @@ def resolve_or_create_statmech(
         session, payload.workflow_tool_release
     )
 
+    fsf_id = None
+    if payload.freq_scale_factor is not None:
+        fsf = resolve_or_create_freq_scale_factor_ref(
+            session, payload.freq_scale_factor, created_by=created_by
+        )
+        fsf_id = fsf.id
+
     statmech = Statmech(
         species_entry_id=species_entry_id,
         scientific_origin=payload.scientific_origin,
@@ -65,7 +73,7 @@ def resolve_or_create_statmech(
         is_linear=payload.is_linear,
         rigid_rotor_kind=payload.rigid_rotor_kind,
         statmech_treatment=payload.statmech_treatment,
-        freq_scale_factor=payload.freq_scale_factor,
+        frequency_scale_factor_id=fsf_id,
         uses_projected_frequencies=payload.uses_projected_frequencies,
         note=payload.note,
         created_by=created_by,

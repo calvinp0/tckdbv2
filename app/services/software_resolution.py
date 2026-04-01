@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
@@ -53,9 +54,13 @@ def resolve_software(
     normalized_name = normalize_software_name(name)
     software = session.scalar(select(Software).where(Software.name == normalized_name))
     if software is None:
-        software = Software(name=normalized_name)
-        session.add(software)
-        session.flush()
+        try:
+            with session.begin_nested():
+                software = Software(name=normalized_name)
+                session.add(software)
+                session.flush()
+        except IntegrityError:
+            software = session.scalar(select(Software).where(Software.name == normalized_name))
 
     return software
 
@@ -93,16 +98,27 @@ def resolve_software_release(
         )
     )
     if release is None:
-        release = SoftwareRelease(
-            software_id=software.id,
-            version=version,
-            revision=revision,
-            build=build,
-            release_date=release_date,
-            notes=notes,
-        )
-        session.add(release)
-        session.flush()
+        try:
+            with session.begin_nested():
+                release = SoftwareRelease(
+                    software_id=software.id,
+                    version=version,
+                    revision=revision,
+                    build=build,
+                    release_date=release_date,
+                    notes=notes,
+                )
+                session.add(release)
+                session.flush()
+        except IntegrityError:
+            release = session.scalar(
+                select(SoftwareRelease).where(
+                    SoftwareRelease.software_id == software.id,
+                    _null_safe_equals(SoftwareRelease.version, version),
+                    _null_safe_equals(SoftwareRelease.revision, revision),
+                    _null_safe_equals(SoftwareRelease.build, build),
+                )
+            )
 
     return release
 

@@ -22,13 +22,17 @@ from app.db.models.common import (
     ArrheniusAUnits,
     CalculationType,
     KineticsModelKind,
+    RigidRotorKind,
     ScientificOriginKind,
+    StatmechTreatmentKind,
+    TorsionTreatmentKind,
 )
 from app.schemas.common import SchemaBase
 from app.schemas.entities.thermo import ThermoNASACreate, ThermoPointCreate
 from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
 from app.schemas.reaction_family import find_canonical_reaction_family
 from app.schemas.fragments.refs import (
+    FreqScaleFactorRef,
     LevelOfTheoryRef,
     SoftwareReleaseRef,
     WorkflowToolReleaseRef,
@@ -88,6 +92,49 @@ class BundleThermoIn(SchemaBase):
 
 
 # ---------------------------------------------------------------------------
+# Statmech (inline, per-species)
+# ---------------------------------------------------------------------------
+
+
+class BundleStatmechTorsionIn(SchemaBase):
+    """One torsional mode in a statmech record.
+
+    :param torsion_index: One-based torsion index.
+    :param symmetry_number: Optional torsional symmetry number.
+    :param treatment_kind: Optional torsion treatment.
+    """
+
+    torsion_index: int = Field(ge=1)
+    symmetry_number: int | None = Field(default=None, ge=1)
+    treatment_kind: TorsionTreatmentKind | None = None
+
+
+class BundleStatmechIn(SchemaBase):
+    """Statistical mechanics properties for a species in this bundle.
+
+    :param scientific_origin: Scientific origin category.
+    :param is_linear: Whether the molecule is linear.
+    :param rigid_rotor_kind: Rotational treatment classification.
+    :param external_symmetry: External symmetry number.
+    :param statmech_treatment: Overall statmech treatment classification.
+    :param freq_scale_factor: Frequency scale factor applied.
+    :param uses_projected_frequencies: Whether projected frequencies were used.
+    :param torsions: Torsional modes.
+    :param note: Optional note.
+    """
+
+    scientific_origin: ScientificOriginKind = ScientificOriginKind.computed
+    is_linear: bool | None = None
+    rigid_rotor_kind: RigidRotorKind | None = None
+    external_symmetry: int | None = Field(default=None, ge=1)
+    statmech_treatment: StatmechTreatmentKind | None = None
+    freq_scale_factor: FreqScaleFactorRef | None = None
+    uses_projected_frequencies: bool | None = None
+    torsions: list[BundleStatmechTorsionIn] = Field(default_factory=list)
+    note: str | None = None
+
+
+# ---------------------------------------------------------------------------
 # Species (with conformers, calculations, thermo)
 # ---------------------------------------------------------------------------
 
@@ -107,6 +154,7 @@ class BundleSpeciesIn(SchemaBase):
     conformers: list[ConformerIn] = Field(default_factory=list)
     calculations: list[CalculationIn] = Field(default_factory=list)
     thermo: BundleThermoIn | None = None
+    statmech: BundleStatmechIn | None = None
 
     @model_validator(mode="after")
     def validate_calc_geometry_keys(self) -> Self:
@@ -223,6 +271,10 @@ class BundleKineticsIn(SchemaBase):
     reported_ea: float | None = None
     reported_ea_units: ActivationEnergyUnits | None = None
 
+    d_a: float | None = None
+    d_n: float | None = None
+    d_reported_ea: float | None = None
+
     tmin_k: float | None = Field(default=None, gt=0)
     tmax_k: float | None = Field(default=None, gt=0)
 
@@ -272,7 +324,8 @@ class ComputedReactionUploadRequest(SchemaBase):
 
     # Provenance (shared across the bundle)
     literature: LiteratureUploadRequest | None = None
-    software_release: SoftwareReleaseRef | None = None
+    software_release: SoftwareReleaseRef | None = None  # ESS software (e.g. Gaussian)
+    analysis_software_release: SoftwareReleaseRef | None = None  # kinetics/thermo analysis code (e.g. Arkane, MESS)
     workflow_tool_release: WorkflowToolReleaseRef | None = None
 
     # Species definitions
@@ -288,8 +341,8 @@ class ComputedReactionUploadRequest(SchemaBase):
     # Transition state
     transition_state: BundleTransitionStateIn | None = None
 
-    # Kinetics fits
-    kinetics: list[BundleKineticsIn] = Field(min_length=1)
+    # Kinetics fits (empty when Arkane fitting didn't complete)
+    kinetics: list[BundleKineticsIn] = Field(default_factory=list)
 
     @field_validator("reaction_family", "reaction_family_source_note")
     @classmethod

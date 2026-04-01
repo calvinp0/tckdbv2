@@ -1,10 +1,20 @@
 from __future__ import annotations
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
-from app.chemistry.species import canonical_species_identity
+from rdkit import Chem
+
+from app.chemistry.species import (
+    canonical_species_identity,
+    classify_stereo_kind,
+    derive_stereo_label_from_3d,
+    derive_unmapped_smiles,
+    identity_mol_from_smiles,
+)
+from app.db.models.common import SpeciesEntryStereoKind
 from app.db.models.species import Species, SpeciesEntry
 from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
 
@@ -36,15 +46,19 @@ def resolve_species(
 
     species = session.scalar(select(Species).where(Species.inchi_key == inchi_key))
     if species is None:
-        species = Species(
-            kind=payload.molecule_kind,
-            smiles=canonical_smiles,
-            inchi_key=inchi_key,
-            charge=payload.charge,
-            multiplicity=payload.multiplicity,
-        )
-        session.add(species)
-        session.flush()
+        try:
+            with session.begin_nested():
+                species = Species(
+                    kind=payload.molecule_kind,
+                    smiles=canonical_smiles,
+                    inchi_key=inchi_key,
+                    charge=payload.charge,
+                    multiplicity=payload.multiplicity,
+                )
+                session.add(species)
+                session.flush()
+        except IntegrityError:
+            species = session.scalar(select(Species).where(Species.inchi_key == inchi_key))
 
     return species
 
@@ -54,6 +68,7 @@ def resolve_species_entry(
     payload: SpeciesEntryIdentityPayload,
     *,
     created_by: int | None = None,
+    xyz_text: str | None = None,
 ) -> SpeciesEntry:
     """Resolve or create a species-entry row from upload identity data.
 
@@ -66,12 +81,25 @@ def resolve_species_entry(
 
     species = resolve_species(session, payload)
 
+    # Auto-derive stereo_kind from molecular graph if not explicitly provided
+    stereo_kind = payload.stereo_kind
+    stereo_label = payload.stereo_label
+    if stereo_kind == SpeciesEntryStereoKind.unspecified:
+        ident_mol = identity_mol_from_smiles(payload.smiles)
+        stereo_kind, auto_label = classify_stereo_kind(ident_mol)
+        if stereo_label is None:
+            stereo_label = auto_label
+
+    # Derive R/S or E/Z label from 3D geometry when available
+    if stereo_label is None and stereo_kind != SpeciesEntryStereoKind.achiral and xyz_text:
+        stereo_label = derive_stereo_label_from_3d(payload.smiles, xyz_text)
+
     species_entry = session.scalar(
         select(SpeciesEntry).where(
             SpeciesEntry.species_id == species.id,
             SpeciesEntry.kind == payload.species_entry_kind,
-            SpeciesEntry.stereo_kind == payload.stereo_kind,
-            null_safe_equals(SpeciesEntry.stereo_label, payload.stereo_label),
+            SpeciesEntry.stereo_kind == stereo_kind,
+            null_safe_equals(SpeciesEntry.stereo_label, stereo_label),
             SpeciesEntry.electronic_state_kind == payload.electronic_state_kind,
             null_safe_equals(
                 SpeciesEntry.electronic_state_label,
@@ -85,21 +113,52 @@ def resolve_species_entry(
         )
     )
     if species_entry is None:
-        species_entry = SpeciesEntry(
-            species_id=species.id,
-            kind=payload.species_entry_kind,
-            unmapped_smiles=payload.unmapped_smiles,
-            stereo_kind=payload.stereo_kind,
-            stereo_label=payload.stereo_label,
-            electronic_state_kind=payload.electronic_state_kind,
-            electronic_state_label=payload.electronic_state_label,
-            term_symbol_raw=payload.term_symbol_raw,
-            term_symbol=payload.term_symbol,
-            isotopologue_label=payload.isotopologue_label,
-            created_by=created_by,
+        # Auto-derive unmapped_smiles and mol SMILES for the RDKit cartridge
+        unmapped = payload.unmapped_smiles
+        if unmapped is None:
+            unmapped = derive_unmapped_smiles(payload.smiles)
+
+        mol_smiles = Chem.MolToSmiles(
+            identity_mol_from_smiles(payload.smiles), canonical=True
         )
-        session.add(species_entry)
-        session.flush()
+
+        try:
+            with session.begin_nested():
+                species_entry = SpeciesEntry(
+                    species_id=species.id,
+                    kind=payload.species_entry_kind,
+                    mol=mol_smiles,
+                    unmapped_smiles=unmapped,
+                    stereo_kind=stereo_kind,
+                    stereo_label=stereo_label,
+                    electronic_state_kind=payload.electronic_state_kind,
+                    electronic_state_label=payload.electronic_state_label,
+                    term_symbol_raw=payload.term_symbol_raw,
+                    term_symbol=payload.term_symbol,
+                    isotopologue_label=payload.isotopologue_label,
+                    created_by=created_by,
+                )
+                session.add(species_entry)
+                session.flush()
+        except IntegrityError:
+            species_entry = session.scalar(
+                select(SpeciesEntry).where(
+                    SpeciesEntry.species_id == species.id,
+                    SpeciesEntry.kind == payload.species_entry_kind,
+                    SpeciesEntry.stereo_kind == stereo_kind,
+                    null_safe_equals(SpeciesEntry.stereo_label, stereo_label),
+                    SpeciesEntry.electronic_state_kind == payload.electronic_state_kind,
+                    null_safe_equals(
+                        SpeciesEntry.electronic_state_label,
+                        payload.electronic_state_label,
+                    ),
+                    null_safe_equals(SpeciesEntry.term_symbol, payload.term_symbol),
+                    null_safe_equals(
+                        SpeciesEntry.isotopologue_label,
+                        payload.isotopologue_label,
+                    ),
+                )
+            )
 
     return species_entry
 

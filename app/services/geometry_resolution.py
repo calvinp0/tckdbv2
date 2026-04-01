@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.chemistry.geometry import parse_xyz
@@ -48,26 +49,32 @@ def resolve_geometry_payload(session: Session, payload: GeometryPayload) -> Geom
         select(Geometry).where(Geometry.geom_hash == geometry_create.geom_hash)
     )
     if geometry is None:
-        geometry = Geometry(
-            natoms=geometry_create.natoms,
-            geom_hash=geometry_create.geom_hash,
-            xyz_text=geometry_create.xyz_text,
-        )
-        session.add(geometry)
-        session.flush()
-
-        for atom in geometry_create.atoms:
-            session.add(
-                GeometryAtom(
-                    geometry_id=geometry.id,
-                    atom_index=atom.atom_index,
-                    element=atom.element,
-                    x=atom.x,
-                    y=atom.y,
-                    z=atom.z,
+        try:
+            with session.begin_nested():
+                geometry = Geometry(
+                    natoms=geometry_create.natoms,
+                    geom_hash=geometry_create.geom_hash,
+                    xyz_text=geometry_create.xyz_text,
                 )
-            )
+                session.add(geometry)
+                session.flush()
 
-        session.flush()
+                for atom in geometry_create.atoms:
+                    session.add(
+                        GeometryAtom(
+                            geometry_id=geometry.id,
+                            atom_index=atom.atom_index,
+                            element=atom.element,
+                            x=atom.x,
+                            y=atom.y,
+                            z=atom.z,
+                        )
+                    )
+
+                session.flush()
+        except IntegrityError:
+            geometry = session.scalar(
+                select(Geometry).where(Geometry.geom_hash == geometry_create.geom_hash)
+            )
 
     return geometry

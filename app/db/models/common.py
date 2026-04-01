@@ -337,3 +337,21 @@ class EnergyCorrectionApplicationRole(str, Enum):
     atomization_reference_adjustment = "atomization_reference_adjustment"
     composite_delta = "composite_delta"
     custom = "custom"
+
+
+class UploadJobStatus(str, Enum):
+    queued = "queued"
+    processing = "processing"
+    complete = "complete"
+    failed = "failed"
+
+
+class UploadJobKind(str, Enum):
+    computed_reaction = "computed_reaction"
+    conformer = "conformer"
+    reaction = "reaction"
+    kinetics = "kinetics"
+    network = "network"
+    network_pdep = "network_pdep"
+    thermo = "thermo"
+    transition_state = "transition_state"

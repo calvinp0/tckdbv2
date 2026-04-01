@@ -25,6 +25,7 @@ from app.db.models.common import (
 
 if TYPE_CHECKING:
     from app.db.models.calculation import Calculation
+    from app.db.models.energy_correction import FrequencyScaleFactor
     from app.db.models.literature import Literature
     from app.db.models.software import SoftwareRelease
     from app.db.models.species import SpeciesEntry
@@ -83,7 +84,11 @@ class Statmech(Base, TimestampMixin, CreatedByMixin):
         nullable=True,
     )
 
-    freq_scale_factor: Mapped[Optional[float]] = mapped_column(nullable=True)
+    frequency_scale_factor_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("frequency_scale_factor.id", deferrable=True, initially="IMMEDIATE"),
+        nullable=True,
+    )
     uses_projected_frequencies: Mapped[Optional[bool]] = mapped_column(nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
@@ -97,6 +102,7 @@ class Statmech(Base, TimestampMixin, CreatedByMixin):
     software_release: Mapped[Optional["SoftwareRelease"]] = relationship(
         back_populates="statmech_records"
     )
+    frequency_scale_factor: Mapped[Optional["FrequencyScaleFactor"]] = relationship()
 
     source_calculations: Mapped[list["StatmechSourceCalculation"]] = relationship(
         back_populates="statmech",
