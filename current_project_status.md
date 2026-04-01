@@ -17,7 +17,7 @@
 | **Level of Theory** | yes | yes | yes | yes | yes |
 | **Software** | yes | yes | yes | yes | yes |
 | **Literature** | yes | yes | yes | yes | yes |
-| **Transport** | yes | partial | no | no | no |
+| **Transport** | yes | partial | yes | yes | yes |
 | **Network** | yes | yes | no | partial | no |
 | **Network PDep** | yes | yes | no | partial | no |
 | **Computed Reaction** | yes | yes | n/a | partial | n/a |
@@ -34,7 +34,7 @@
 
 ## Notes
 
-- **Transport**: Resolution service exists and is called during conformer and network-pdep uploads, but there is no standalone upload workflow and no read API route.
+- **Transport**: Read API at `/transport` with list + get-by-id + 5 filters. No standalone upload workflow (created via conformer and network-pdep uploads). 10 tests covering happy-path field serialization, all filters, and species sub-resource parity.
 - **Network / Network PDep**: Upload workflows and workflow-level tests exist, but no read API routes are registered.
 - **Computed Reaction**: A bundle upload that creates species, reactions, transition states, kinetics, and calculations. Reads are served through each individual entity's endpoints.
 - **Statmech / Energy Corrections**: API read tests exist but only cover empty-list and not-found scenarios; no upload-then-read integration tests yet.

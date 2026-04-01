@@ -12,8 +12,11 @@ from app.db.models.energy_correction import (
     EnergyCorrectionScheme,
     FrequencyScaleFactor,
 )
+from sqlalchemy import select
+
 from app.db.models.literature import Literature
 from app.db.models.literature_author import LiteratureAuthor
+from app.db.models.transport import Transport
 
 
 # ---------------------------------------------------------------------------
@@ -130,6 +133,45 @@ def _kinetics_payload() -> dict:
     }
 
 
+def _hydrogen_conformer_with_transport_payload(
+    label: str = "conf-transport",
+    *,
+    scientific_origin: str = "computed",
+    software_name: str = "Gaussian",
+    software_version: str = "16",
+    workflow_tool_name: str = "ARC",
+    workflow_tool_version: str = "1.1.0",
+    literature_title: str = "Transport Benchmark Paper",
+    literature_year: int = 2024,
+    sigma_angstrom: float = 2.05,
+    epsilon_over_k_k: float = 145.0,
+    dipole_debye: float = 0.0,
+    polarizability_angstrom3: float = 0.67,
+    rotational_relaxation: float = 1.0,
+) -> dict:
+    payload = _hydrogen_conformer_payload(label)
+    payload["transport"] = {
+        "scientific_origin": scientific_origin,
+        "software_release": {"name": software_name, "version": software_version},
+        "workflow_tool_release": {
+            "name": workflow_tool_name,
+            "version": workflow_tool_version,
+        },
+        "literature": {
+            "kind": "article",
+            "title": literature_title,
+            "year": literature_year,
+        },
+        "sigma_angstrom": sigma_angstrom,
+        "epsilon_over_k_k": epsilon_over_k_k,
+        "dipole_debye": dipole_debye,
+        "polarizability_angstrom3": polarizability_angstrom3,
+        "rotational_relaxation": rotational_relaxation,
+        "note": "transport test",
+    }
+    return payload
+
+
 # ---------------------------------------------------------------------------
 # Species reads
 # ---------------------------------------------------------------------------
@@ -193,6 +235,23 @@ class TestSpeciesReads:
         resp = client.get(f"/api/v1/species-entries/{entry_id}/thermo")
         assert resp.status_code == 200
         assert len(resp.json()) >= 1
+
+    def test_species_entry_transport_subresource(self, client):
+        upload = client.post(
+            "/api/v1/uploads/conformers",
+            json=_hydrogen_conformer_with_transport_payload(),
+        ).json()
+        entry_id = upload["species_entry_id"]
+
+        resp = client.get(f"/api/v1/species-entries/{entry_id}/transport")
+        assert resp.status_code == 200
+        items = resp.json()
+        assert len(items) == 1
+        item = items[0]
+        assert item["scientific_origin"] == "computed"
+        assert item["sigma_angstrom"] == 2.05
+        assert item["epsilon_over_k_k"] == 145.0
+        assert item["source_calculations"] == []
 
     def test_species_entry_not_found(self, client):
         resp = client.get("/api/v1/species-entries/999999")
@@ -952,6 +1011,223 @@ class TestTransportReads:
     def test_not_found(self, client):
         resp = client.get("/api/v1/transport/999999")
         assert resp.status_code == 404
+
+    def test_transport_happy_path(self, client, db_session):
+        client.post(
+            "/api/v1/uploads/conformers",
+            json=_hydrogen_conformer_with_transport_payload(),
+        )
+        resp = client.get("/api/v1/transport")
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 1
+
+        item = resp.json()["items"][0]
+        # Scalar transport fields
+        assert item["scientific_origin"] == "computed"
+        assert item["sigma_angstrom"] == 2.05
+        assert item["epsilon_over_k_k"] == 145.0
+        assert item["dipole_debye"] == 0.0
+        assert item["polarizability_angstrom3"] == 0.67
+        assert item["rotational_relaxation"] == 1.0
+        # Provenance IDs — verify against ORM row
+        transport = db_session.scalar(
+            select(Transport).where(Transport.id == item["id"])
+        )
+        assert transport is not None
+        assert item["species_entry_id"] == transport.species_entry_id
+        assert item["software_release_id"] == transport.software_release_id
+        assert item["workflow_tool_release_id"] == transport.workflow_tool_release_id
+        assert item["literature_id"] == transport.literature_id
+        assert item["created_by"] == transport.created_by
+        assert item["note"] == "transport test"
+        assert item["created_at"] is not None
+        assert item["source_calculations"] == []
+
+    def test_get_by_id(self, client, db_session):
+        upload = client.post(
+            "/api/v1/uploads/conformers",
+            json=_hydrogen_conformer_with_transport_payload(),
+        ).json()
+        transport = db_session.scalar(
+            select(Transport).where(
+                Transport.species_entry_id == upload["species_entry_id"]
+            )
+        )
+        assert transport is not None
+
+        resp = client.get(f"/api/v1/transport/{transport.id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == transport.id
+        assert data["scientific_origin"] == "computed"
+        assert data["sigma_angstrom"] == 2.05
+        assert data["epsilon_over_k_k"] == 145.0
+        assert data["software_release_id"] == transport.software_release_id
+        assert data["literature_id"] == transport.literature_id
+        assert data["source_calculations"] == []
+
+    def test_filter_by_species_entry_id(self, client):
+        # Upload two conformers with different species identities
+        upload_h = client.post(
+            "/api/v1/uploads/conformers",
+            json=_hydrogen_conformer_with_transport_payload("transport-H"),
+        ).json()
+        # Build a He conformer with transport (different species identity)
+        he_payload = _hydrogen_conformer_with_transport_payload("transport-He")
+        he_payload["species_entry"] = {
+            "smiles": "[He]",
+            "charge": 0,
+            "multiplicity": 1,
+        }
+        he_payload["geometry"] = {"xyz_text": "1\nHe atom\nHe 0.0 0.0 0.0"}
+        upload_he = client.post(
+            "/api/v1/uploads/conformers", json=he_payload
+        ).json()
+        assert upload_h["species_entry_id"] != upload_he["species_entry_id"]
+
+        resp = client.get(
+            "/api/v1/transport",
+            params={"species_entry_id": upload_h["species_entry_id"]},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 1
+        assert resp.json()["items"][0]["species_entry_id"] == upload_h["species_entry_id"]
+
+    def test_filter_by_scientific_origin(self, client):
+        # Upload two transport rows with different origins
+        client.post(
+            "/api/v1/uploads/conformers",
+            json=_hydrogen_conformer_with_transport_payload(
+                "transport-computed", scientific_origin="computed"
+            ),
+        )
+        he_payload = _hydrogen_conformer_with_transport_payload(
+            "transport-experimental", scientific_origin="experimental"
+        )
+        he_payload["species_entry"] = {
+            "smiles": "[He]",
+            "charge": 0,
+            "multiplicity": 1,
+        }
+        he_payload["geometry"] = {"xyz_text": "1\nHe atom\nHe 0.0 0.0 0.0"}
+        client.post("/api/v1/uploads/conformers", json=he_payload)
+
+        resp = client.get(
+            "/api/v1/transport",
+            params={"scientific_origin": "experimental"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 1
+        assert resp.json()["items"][0]["scientific_origin"] == "experimental"
+
+    def test_filter_by_software_release_id(self, client, db_session):
+        # Upload two transport rows with different software releases
+        client.post(
+            "/api/v1/uploads/conformers",
+            json=_hydrogen_conformer_with_transport_payload(
+                "transport-g16", software_name="Gaussian", software_version="16"
+            ),
+        )
+        he_payload = _hydrogen_conformer_with_transport_payload(
+            "transport-orca", software_name="ORCA", software_version="5.0"
+        )
+        he_payload["species_entry"] = {
+            "smiles": "[He]",
+            "charge": 0,
+            "multiplicity": 1,
+        }
+        he_payload["geometry"] = {"xyz_text": "1\nHe atom\nHe 0.0 0.0 0.0"}
+        client.post("/api/v1/uploads/conformers", json=he_payload)
+
+        # Get all transport rows to find the distinct software_release_ids
+        all_resp = client.get("/api/v1/transport")
+        assert all_resp.json()["total"] == 2
+        items = all_resp.json()["items"]
+        sw_ids = {it["software_release_id"] for it in items}
+        assert len(sw_ids) == 2
+
+        target_id = items[0]["software_release_id"]
+        resp = client.get(
+            "/api/v1/transport", params={"software_release_id": target_id}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 1
+        assert resp.json()["items"][0]["software_release_id"] == target_id
+
+    def test_filter_by_workflow_tool_release_id(self, client, db_session):
+        # Upload two transport rows with different workflow tool releases
+        client.post(
+            "/api/v1/uploads/conformers",
+            json=_hydrogen_conformer_with_transport_payload(
+                "transport-arc1",
+                workflow_tool_name="ARC",
+                workflow_tool_version="1.1.0",
+            ),
+        )
+        he_payload = _hydrogen_conformer_with_transport_payload(
+            "transport-arc2",
+            workflow_tool_name="ARC",
+            workflow_tool_version="2.0.0",
+        )
+        he_payload["species_entry"] = {
+            "smiles": "[He]",
+            "charge": 0,
+            "multiplicity": 1,
+        }
+        he_payload["geometry"] = {"xyz_text": "1\nHe atom\nHe 0.0 0.0 0.0"}
+        client.post("/api/v1/uploads/conformers", json=he_payload)
+
+        all_resp = client.get("/api/v1/transport")
+        assert all_resp.json()["total"] == 2
+        items = all_resp.json()["items"]
+        wt_ids = {it["workflow_tool_release_id"] for it in items}
+        assert len(wt_ids) == 2
+
+        target_id = items[0]["workflow_tool_release_id"]
+        resp = client.get(
+            "/api/v1/transport",
+            params={"workflow_tool_release_id": target_id},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 1
+        assert resp.json()["items"][0]["workflow_tool_release_id"] == target_id
+
+    def test_filter_by_literature_id(self, client, db_session):
+        # Upload two transport rows with different literature refs
+        client.post(
+            "/api/v1/uploads/conformers",
+            json=_hydrogen_conformer_with_transport_payload(
+                "transport-lit1",
+                literature_title="Transport Paper Alpha",
+                literature_year=2020,
+            ),
+        )
+        he_payload = _hydrogen_conformer_with_transport_payload(
+            "transport-lit2",
+            literature_title="Transport Paper Beta",
+            literature_year=2023,
+        )
+        he_payload["species_entry"] = {
+            "smiles": "[He]",
+            "charge": 0,
+            "multiplicity": 1,
+        }
+        he_payload["geometry"] = {"xyz_text": "1\nHe atom\nHe 0.0 0.0 0.0"}
+        client.post("/api/v1/uploads/conformers", json=he_payload)
+
+        all_resp = client.get("/api/v1/transport")
+        assert all_resp.json()["total"] == 2
+        items = all_resp.json()["items"]
+        lit_ids = {it["literature_id"] for it in items}
+        assert len(lit_ids) == 2
+
+        target_id = items[0]["literature_id"]
+        resp = client.get(
+            "/api/v1/transport", params={"literature_id": target_id}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 1
+        assert resp.json()["items"][0]["literature_id"] == target_id
 
 
 # ---------------------------------------------------------------------------

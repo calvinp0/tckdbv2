@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import PaginationParams, get_db
 from app.api.errors import NotFoundError
@@ -165,6 +165,7 @@ def list_transport_for_entry(
     rows = session.scalars(
         select(Transport)
         .where(Transport.species_entry_id == entry_id)
+        .options(selectinload(Transport.source_calculations))
         .order_by(Transport.id)
     ).all()
     return [TransportRead.model_validate(r) for r in rows]
