@@ -5,14 +5,23 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.routes import (
+    calculations,
+    conformers,
+    energy_corrections,
+    geometries,
     health,
     jobs,
     kinetics,
+    levels_of_theory,
+    literature,
     lookup,
     reactions,
+    software,
     species,
+    statmech,
     thermo,
     transition_states,
+    transport,
     uploads,
 )
 
@@ -21,6 +30,9 @@ api_router.include_router(health.router, tags=["health"])
 api_router.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 api_router.include_router(lookup.router, prefix="/lookup", tags=["lookup"])
 api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])
+api_router.include_router(
+    calculations.router, prefix="/calculations", tags=["calculations"]
+)
 api_router.include_router(species.router, prefix="/species", tags=["species"])
 api_router.include_router(
     species.entries_router, prefix="/species-entries", tags=["species-entries"]
@@ -36,3 +48,45 @@ api_router.include_router(
     prefix="/transition-states",
     tags=["transition-states"],
 )
+api_router.include_router(
+    geometries.router, prefix="/geometries", tags=["geometries"]
+)
+api_router.include_router(
+    levels_of_theory.router, prefix="/levels-of-theory", tags=["levels-of-theory"]
+)
+api_router.include_router(software.router, prefix="/software", tags=["software"])
+api_router.include_router(
+    software.releases_router,
+    prefix="/software-releases",
+    tags=["software-releases"],
+)
+api_router.include_router(
+    literature.router, prefix="/literature", tags=["literature"]
+)
+api_router.include_router(
+    conformers.groups_router,
+    prefix="/conformer-groups",
+    tags=["conformer-groups"],
+)
+api_router.include_router(
+    conformers.observations_router,
+    prefix="/conformer-observations",
+    tags=["conformer-observations"],
+)
+api_router.include_router(
+    energy_corrections.schemes_router,
+    prefix="/energy-correction-schemes",
+    tags=["energy-correction-schemes"],
+)
+api_router.include_router(
+    energy_corrections.scale_factors_router,
+    prefix="/frequency-scale-factors",
+    tags=["frequency-scale-factors"],
+)
+api_router.include_router(
+    energy_corrections.applied_router,
+    prefix="/applied-energy-corrections",
+    tags=["applied-energy-corrections"],
+)
+api_router.include_router(statmech.router, prefix="/statmech", tags=["statmech"])
+api_router.include_router(transport.router, prefix="/transport", tags=["transport"])

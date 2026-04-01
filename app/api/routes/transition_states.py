@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import PaginationParams, get_db
 from app.api.errors import NotFoundError
+from app.api.routes._pagination import PaginatedResponse
 from app.db.models.transition_state import TransitionState, TransitionStateEntry
 from app.schemas.entities.transition_state import (
     TransitionStateEntryRead,
@@ -14,6 +16,37 @@ from app.schemas.entities.transition_state import (
 )
 
 router = APIRouter()
+
+
+@router.get("", response_model=PaginatedResponse[TransitionStateRead])
+def list_transition_states(
+    session: Session = Depends(get_db),
+    pagination: PaginationParams = Depends(),
+    reaction_entry_id: int | None = Query(None),
+    label: str | None = Query(None),
+):
+    base = select(TransitionState.id)
+    if reaction_entry_id is not None:
+        base = base.where(TransitionState.reaction_entry_id == reaction_entry_id)
+    if label is not None:
+        base = base.where(TransitionState.label == label)
+
+    total = session.scalar(
+        select(func.count()).select_from(base.subquery())
+    ) or 0
+    rows = session.scalars(
+        select(TransitionState)
+        .where(TransitionState.id.in_(base))
+        .order_by(TransitionState.id)
+        .offset(pagination.skip)
+        .limit(pagination.limit)
+    ).all()
+    return PaginatedResponse(
+        items=[TransitionStateRead.model_validate(r) for r in rows],
+        total=total,
+        skip=pagination.skip,
+        limit=pagination.limit,
+    )
 
 
 @router.get("/{ts_id}", response_model=TransitionStateRead)

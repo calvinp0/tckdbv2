@@ -1,4 +1,5 @@
-from typing import Self
+from datetime import datetime
+from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -9,6 +10,8 @@ from app.db.models.common import (
     CalculationQuality,
     CalculationType,
     ConstraintKind,
+    IRCDirection,
+    ValidationStatus,
 )
 from app.schemas.common import (
     ORMBaseSchema,
@@ -16,6 +19,7 @@ from app.schemas.common import (
     TimestampedCreatedByReadSchema,
     TimestampedReadSchema,
 )
+from app.schemas.entities.geometry import GeometryRead
 from app.schemas.fragments.calculation import CalculationOwnerRequiredMixin
 
 
@@ -46,12 +50,13 @@ class CalculationUpdate(SchemaBase):
     literature_id: int | None = None
 
 
-class CalculationRead(TimestampedCreatedByReadSchema):
+class CalculationRead(TimestampedReadSchema):
     type: CalculationType
     quality: CalculationQuality
 
     species_entry_id: int | None = None
     transition_state_entry_id: int | None = None
+    conformer_observation_id: int | None = None
 
     software_release_id: int | None = None
     workflow_tool_release_id: int | None = None
@@ -100,6 +105,23 @@ class CalculationOutputGeometryRead(CalculationOutputGeometryBase, ORMBaseSchema
     pass
 
 
+class CalculationInputGeometryDetailRead(ORMBaseSchema):
+    """Geometry link with embedded geometry payload for input-geometry sub-resource."""
+
+    geometry_id: int
+    input_order: int
+    geometry: GeometryRead
+
+
+class CalculationOutputGeometryDetailRead(ORMBaseSchema):
+    """Geometry link with embedded geometry payload for output-geometry sub-resource."""
+
+    geometry_id: int
+    output_order: int
+    role: CalculationGeometryRole | None = None
+    geometry: GeometryRead
+
+
 class CalculationDependencyBase(BaseModel):
     parent_calculation_id: int
     child_calculation_id: int
@@ -124,6 +146,12 @@ class CalculationDependencyUpdate(SchemaBase):
 
 class CalculationDependencyRead(CalculationDependencyBase, ORMBaseSchema):
     pass
+
+
+class CalculationDependencyDirectionalRead(CalculationDependencyBase, ORMBaseSchema):
+    """Dependency edge annotated with direction relative to the queried calculation."""
+
+    direction: Literal["outgoing", "incoming"]
 
 
 class CalculationArtifactBase(BaseModel):
@@ -423,3 +451,91 @@ class CalculationScanResultRead(CalculationScanResultPayload, ORMBaseSchema):
     coordinates: list[CalculationScanCoordinateRead] = Field(default_factory=list)
     constraints: list[CalculationConstraintRead] = Field(default_factory=list)
     points: list[CalculationScanPointRead] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# IRC result and points (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+class CalculationIRCPointRead(ORMBaseSchema):
+    calculation_id: int
+    point_index: int
+    direction: IRCDirection | None = None
+    is_ts: bool
+    reaction_coordinate: float | None = None
+    electronic_energy_hartree: float | None = None
+    relative_energy_kj_mol: float | None = None
+    max_gradient: float | None = None
+    rms_gradient: float | None = None
+    geometry_id: int | None = None
+    note: str | None = None
+
+
+class CalculationIRCResultRead(ORMBaseSchema):
+    calculation_id: int
+    direction: IRCDirection
+    has_forward: bool
+    has_reverse: bool
+    ts_point_index: int | None = None
+    point_count: int | None = None
+    zero_energy_reference_hartree: float | None = None
+    note: str | None = None
+    points: list[CalculationIRCPointRead] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# NEB image results (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+class CalculationNEBImageResultRead(ORMBaseSchema):
+    calculation_id: int
+    image_index: int
+    electronic_energy_hartree: float | None = None
+    relative_energy_kj_mol: float | None = None
+    path_distance_angstrom: float | None = None
+    max_force: float | None = None
+    rms_force: float | None = None
+    is_climbing_image: bool
+
+
+# ---------------------------------------------------------------------------
+# Calculation parameters (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+class CalculationParameterRead(TimestampedReadSchema):
+    calculation_id: int
+    raw_key: str
+    canonical_key: str | None = None
+    raw_value: str
+    canonical_value: str | None = None
+    section: str | None = None
+    value_type: str | None = None
+    unit: str | None = None
+    parameter_index: int | None = None
+
+
+# ---------------------------------------------------------------------------
+# Geometry validation (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+class CalculationGeometryValidationRead(ORMBaseSchema):
+    """Inherits ORMBaseSchema (not TimestampedReadSchema) because the PK is
+    calculation_id, not a surrogate id column. TimestampedReadSchema assumes
+    id: int which does not exist on this table."""
+
+    calculation_id: int
+    created_at: datetime
+    input_geometry_id: int | None = None
+    output_geometry_id: int | None = None
+    species_smiles: str
+    is_isomorphic: bool
+    rmsd: float | None = None
+    atom_mapping: dict | None = None
+    n_mappings: int | None = None
+    validation_status: ValidationStatus
+    validation_reason: str | None = None
+    rmsd_warning_threshold: float | None = None

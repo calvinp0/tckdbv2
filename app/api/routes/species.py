@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import PaginationParams, get_db
 from app.api.errors import NotFoundError
+from app.db.models.common import MoleculeKind
 from app.db.models.species import (
     ConformerGroup,
     ConformerObservation,
@@ -37,17 +38,37 @@ router = APIRouter()
 def list_species(
     session: Session = Depends(get_db),
     pagination: PaginationParams = Depends(),
+    smiles: str | None = Query(None),
+    inchi_key: str | None = Query(None),
+    charge: int | None = Query(None),
+    multiplicity: int | None = Query(None),
+    kind: MoleculeKind | None = Query(None),
 ):
-    total = session.scalar(select(func.count(Species.id)))
+    base = select(Species.id)
+    if smiles is not None:
+        base = base.where(Species.smiles == smiles)
+    if inchi_key is not None:
+        base = base.where(Species.inchi_key == inchi_key)
+    if charge is not None:
+        base = base.where(Species.charge == charge)
+    if multiplicity is not None:
+        base = base.where(Species.multiplicity == multiplicity)
+    if kind is not None:
+        base = base.where(Species.kind == kind)
+
+    total = session.scalar(
+        select(func.count()).select_from(base.subquery())
+    ) or 0
     rows = session.scalars(
         select(Species)
+        .where(Species.id.in_(base))
         .order_by(Species.id)
         .offset(pagination.skip)
         .limit(pagination.limit)
     ).all()
     return PaginatedResponse(
         items=[SpeciesRead.model_validate(r) for r in rows],
-        total=total or 0,
+        total=total,
         skip=pagination.skip,
         limit=pagination.limit,
     )

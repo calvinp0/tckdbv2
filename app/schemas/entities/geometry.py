@@ -2,7 +2,7 @@ from typing import List
 
 from pydantic import BaseModel, Field
 
-from app.schemas.common import SchemaBase, TimestampedReadSchema
+from app.schemas.common import ORMBaseSchema, SchemaBase, TimestampedReadSchema
 
 
 class GeometryAtomBase(BaseModel):
@@ -15,7 +15,7 @@ class GeometryAtomBase(BaseModel):
     z: float
 
 
-class GeometryAtomRead(GeometryAtomBase):
+class GeometryAtomRead(GeometryAtomBase, ORMBaseSchema):
     """Read schema with common geometry fields."""
 
     geometry_id: int

@@ -297,6 +297,8 @@ class StatmechUpdate(SchemaBase):
 class StatmechRead(StatmechBase, TimestampedCreatedByReadSchema):
     """Read schema for a statmech resource."""
 
+    frequency_scale_factor_id: int | None = None
+
     source_calculations: list[StatmechSourceCalculationRead] = Field(
         default_factory=list
     )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -28,17 +28,31 @@ router = APIRouter()
 def list_reactions(
     session: Session = Depends(get_db),
     pagination: PaginationParams = Depends(),
+    reversible: bool | None = Query(None),
+    reaction_family_id: int | None = Query(None),
+    reaction_family_raw: str | None = Query(None),
 ):
-    total = session.scalar(select(func.count(ChemReaction.id)))
+    base = select(ChemReaction.id)
+    if reversible is not None:
+        base = base.where(ChemReaction.reversible == reversible)
+    if reaction_family_id is not None:
+        base = base.where(ChemReaction.reaction_family_id == reaction_family_id)
+    if reaction_family_raw is not None:
+        base = base.where(ChemReaction.reaction_family_raw == reaction_family_raw)
+
+    total = session.scalar(
+        select(func.count()).select_from(base.subquery())
+    ) or 0
     rows = session.scalars(
         select(ChemReaction)
+        .where(ChemReaction.id.in_(base))
         .order_by(ChemReaction.id)
         .offset(pagination.skip)
         .limit(pagination.limit)
     ).all()
     return PaginatedResponse(
         items=[ChemReactionRead.model_validate(r) for r in rows],
-        total=total or 0,
+        total=total,
         skip=pagination.skip,
         limit=pagination.limit,
     )

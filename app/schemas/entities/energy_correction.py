@@ -179,7 +179,8 @@ class FrequencyScaleFactorUpdate(SchemaBase):
 class FrequencyScaleFactorRead(
     FrequencyScaleFactorBase, TimestampedCreatedByReadSchema
 ):
-    pass
+    software_id: int | None = None
+    workflow_tool_release_id: int | None = None
 
 
 # ---------------------------------------------------------------------------

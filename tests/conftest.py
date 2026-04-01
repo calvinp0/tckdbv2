@@ -144,8 +144,16 @@ def client(db_engine, _api_test_user) -> Iterator[TestClient]:
     app.dependency_overrides[get_current_user] = lambda: test_user
 
     with TestClient(app) as c:
+        c._db_session = session  # expose for tests that need raw inserts
         yield c
 
     session.close()
     transaction.rollback()
     connection.close()
+
+
+@pytest.fixture
+def db_session(client) -> Session:
+    """The same DB session used by the TestClient, for raw ORM inserts
+    that need to be visible to the API endpoints in the same transaction."""
+    return client._db_session
