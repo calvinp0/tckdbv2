@@ -500,7 +500,7 @@ def _species_thermo_block(
     the trust semantics are identical (``collapse=first`` → the single
     policy-preferred approved-class thermo).
     """
-    chosen, status_by_id = export_core._select_candidate_ids(
+    chosen, status_by_id = export_core.select_candidate_ids(
         session,
         model=Thermo,
         parent_column=Thermo.species_entry_id,
@@ -892,43 +892,51 @@ def _species_entry_energy_at_lot(
     return min(values) if values else None
 
 
-def _ts_energy(
+def _ts_energy_candidates(
     session: Session, ts_entry_id: int
-) -> tuple[float | None, int | None, Calculation | None]:
-    """Return (electronic_energy_hartree, lot_id, calculation) for a TS entry.
+) -> list[tuple[float, int | None, Calculation]]:
+    """Best TS electronic energy per LOT, ordered by energy ascending.
 
-    Prefers a single-point energy, falls back to the optimisation final
-    energy. The chosen calculation carries the LOT the barrier is defined at.
+    Returns one ``(energy_hartree, lot_id, calculation)`` candidate per
+    distinct ``lot_id`` (including ``None``). Within one LOT, single-point
+    energies are preferred over optimisation final energies, and the lowest
+    value wins. Callers walk this list to find a LOT with complete reactant
+    coverage for the electronic barrier.
     """
-    sp = session.execute(
-        select(
-            CalculationSPResult.electronic_energy_hartree,
-            Calculation,
-        )
+    sp_rows = session.execute(
+        select(CalculationSPResult.electronic_energy_hartree, Calculation)
         .join(Calculation, Calculation.id == CalculationSPResult.calculation_id)
         .where(
             Calculation.transition_state_entry_id == ts_entry_id,
             CalculationSPResult.electronic_energy_hartree.is_not(None),
         )
-        .order_by(CalculationSPResult.electronic_energy_hartree)
-    ).first()
-    if sp is not None:
-        return sp[0], sp[1].lot_id, sp[1]
-    opt = session.execute(
-        select(
-            CalculationOptResult.final_energy_hartree,
-            Calculation,
-        )
+    ).all()
+    opt_rows = session.execute(
+        select(CalculationOptResult.final_energy_hartree, Calculation)
         .join(Calculation, Calculation.id == CalculationOptResult.calculation_id)
         .where(
             Calculation.transition_state_entry_id == ts_entry_id,
             CalculationOptResult.final_energy_hartree.is_not(None),
         )
-        .order_by(CalculationOptResult.final_energy_hartree)
-    ).first()
-    if opt is not None:
-        return opt[0], opt[1].lot_id, opt[1]
-    return None, None, None
+    ).all()
+
+    best_sp: dict[int | None, tuple[float, Calculation]] = {}
+    for energy, calc in sp_rows:
+        current = best_sp.get(calc.lot_id)
+        if current is None or energy < current[0]:
+            best_sp[calc.lot_id] = (energy, calc)
+    best_opt: dict[int | None, tuple[float, Calculation]] = {}
+    for energy, calc in opt_rows:
+        current = best_opt.get(calc.lot_id)
+        if current is None or energy < current[0]:
+            best_opt[calc.lot_id] = (energy, calc)
+
+    candidates: list[tuple[float, int | None, Calculation]] = []
+    for lot_id in set(best_sp) | set(best_opt):
+        energy, calc = best_sp.get(lot_id) or best_opt[lot_id]
+        candidates.append((energy, lot_id, calc))
+    candidates.sort(key=lambda t: t[0])
+    return candidates
 
 
 def _select_ts_entry(
@@ -955,7 +963,7 @@ def _kinetics_blocks(
     """Selected Arrhenius kinetics for a reaction entry (read-time trust policy)."""
     from app.db.models.kinetics import Kinetics
 
-    chosen, status_by_id = export_core._select_candidate_ids(
+    chosen, status_by_id = export_core.select_candidate_ids(
         session,
         model=Kinetics,
         parent_column=Kinetics.reaction_entry_id,
@@ -996,12 +1004,49 @@ def _ts_and_barrier(
     lot_cache: dict[int, dict | None],
     geom_cache: dict[int, _GeometryPayload],
 ) -> tuple[dict | None, dict | None]:
-    """Build the TS geometry+energy block and the electronic forward barrier."""
+    """Build the TS geometry+energy block and the electronic forward barrier.
+
+    LOT selection walks the per-LOT TS energy candidates (lowest TS energy
+    first) and picks the **first LOT for which every reactant has an energy**
+    via :func:`_species_entry_energy_at_lot`, so one LOT lacking reactant
+    coverage does not null the barrier when another LOT is complete. The TS
+    energy block is emitted at that same chosen LOT so the record stays
+    internally consistent. When no LOT completes the reactant set, the TS
+    block falls back to the overall lowest-energy candidate and the barrier
+    is ``null``.
+    """
     ts_entry = _select_ts_entry(session, reaction_entry_id)
     if ts_entry is None:
         return None, None
 
-    energy_hartree, lot_id, calc = _ts_energy(session, ts_entry.id)
+    candidates = _ts_energy_candidates(session, ts_entry.id)
+
+    chosen: tuple[float, int | None, Calculation] | None = None
+    reactant_energies: list[float] | None = None
+    if reactant_ids:
+        for cand_energy, cand_lot_id, cand_calc in candidates:
+            if cand_lot_id is None:
+                continue
+            energies = [
+                _species_entry_energy_at_lot(session, se_id, cand_lot_id)
+                for se_id in reactant_ids
+            ]
+            if all(e is not None for e in energies):
+                chosen = (cand_energy, cand_lot_id, cand_calc)
+                reactant_energies = [e for e in energies if e is not None]
+                break
+    if chosen is None and candidates:
+        # No LOT has full reactant coverage: emit the TS block at the
+        # overall lowest-energy candidate; the barrier stays null.
+        chosen = candidates[0]
+
+    energy_hartree: float | None
+    lot_id: int | None
+    calc: Calculation | None
+    if chosen is not None:
+        energy_hartree, lot_id, calc = chosen
+    else:
+        energy_hartree, lot_id, calc = None, None, None
     lot_block = _lot_block(session, lot_id, lot_cache)
 
     ts_geometry: dict | None = None
@@ -1036,18 +1081,17 @@ def _ts_and_barrier(
     }
 
     barrier: dict | None = None
-    if energy_hartree is not None and lot_id is not None and reactant_ids:
-        reactant_energies = [
-            _species_entry_energy_at_lot(session, se_id, lot_id)
-            for se_id in reactant_ids
-        ]
-        if all(e is not None for e in reactant_energies):
-            delta_hartree = energy_hartree - sum(reactant_energies)  # type: ignore[arg-type]
-            barrier = {
-                "electronic_forward_kj_mol": delta_hartree * HARTREE_TO_KJ_MOL,
-                "level_of_theory": lot_block,
-                "definition": "E_TS - sum(E_reactants) at a shared level of theory",
-            }
+    if energy_hartree is not None and reactant_energies is not None:
+        delta_hartree = energy_hartree - sum(reactant_energies)
+        barrier = {
+            "electronic_forward_kj_mol": delta_hartree * HARTREE_TO_KJ_MOL,
+            "level_of_theory": lot_block,
+            "definition": (
+                "E_TS - sum(E_reactants) at a shared level of theory; "
+                "reactant energies are the minimum over available "
+                "calculations (lowest-conformer convention) at that LOT"
+            ),
+        }
     return ts_block, barrier
 
 
@@ -1191,7 +1235,7 @@ def iter_ml_reactions_ndjson(
         reaction_family=reaction_family,
         all_reactions=all_reactions,
     )
-    reaction_entry_ids, _standalone = export_core._resolve_seed(
+    reaction_entry_ids, _standalone = export_core.resolve_seed(
         session, seed, all_cap=all_cap
     )
     if filters.offset:

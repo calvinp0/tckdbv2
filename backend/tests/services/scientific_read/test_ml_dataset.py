@@ -483,6 +483,130 @@ def test_reaction_export_barrier_null_without_shared_lot(db_session):
     assert record["transition_state"]["energy"]["electronic_energy_hartree"] == -114.9
 
 
+def test_reaction_export_barrier_lot_fallback(db_session):
+    """The barrier LOT walk skips a lower-energy TS LOT without reactant
+    coverage and settles on the first LOT whose reactant set is complete,
+    keeping the emitted TS energy block at that same LOT."""
+    lot_cov = make_lot(db_session, method="wb97xd", basis="def2tzvp")
+    lot_nocov = make_lot(db_session, method="b3lyp", basis="6-31g")
+    e_a = _reactant_with_energy(db_session, "C", -115.0, lot_cov)
+    e_c = _reactant_with_energy(db_session, "CO", -115.3, lot_cov)
+    chem = make_chem_reaction(
+        db_session, reactants=[e_a.species], products=[e_c.species]
+    )
+    rxn_entry = make_reaction_entry(
+        db_session, reaction=chem, reactant_entries=[e_a], product_entries=[e_c]
+    )
+    _approve(db_session, SubmissionRecordType.reaction_entry, rxn_entry.id)
+
+    ts = make_transition_state(db_session, reaction_entry=rxn_entry)
+    tse = make_transition_state_entry(db_session, transition_state=ts)
+    ts_geo = make_geometry(db_session, natoms=1)
+    attach_geometry_atoms(
+        db_session, geometry=ts_geo, symbols=["C"], coords=[[0.0, 0.0, 0.0]]
+    )
+    # Lower TS energy at a LOT with NO reactant coverage...
+    calc_nocov = make_calculation(
+        db_session,
+        type=CalculationType.sp,
+        transition_state_entry_id=tse.id,
+        lot_id=lot_nocov.id,
+    )
+    attach_input_geometry(db_session, calculation=calc_nocov, geometry=ts_geo)
+    attach_sp_result(
+        db_session, calculation=calc_nocov, electronic_energy_hartree=-115.2
+    )
+    # ...and a higher TS energy at the LOT the reactants are covered at.
+    calc_cov = make_calculation(
+        db_session,
+        type=CalculationType.sp,
+        transition_state_entry_id=tse.id,
+        lot_id=lot_cov.id,
+    )
+    attach_input_geometry(db_session, calculation=calc_cov, geometry=ts_geo)
+    attach_sp_result(
+        db_session, calculation=calc_cov, electronic_energy_hartree=-114.95
+    )
+
+    lines = list(
+        iter_ml_reactions_ndjson(db_session, reaction_refs=[rxn_entry.public_ref])
+    )
+    (record,) = [p for p in _parse(lines) if p["record_type"] == "ml_reaction"]
+
+    # Barrier is computed at the covered LOT, not nulled by the lower-energy
+    # uncovered one: E_TS - E_reactant = -114.95 - (-115.0) = 0.05 hartree.
+    barrier = record["barrier"]
+    assert barrier is not None
+    assert barrier["electronic_forward_kj_mol"] == pytest.approx(
+        0.05 * HARTREE_TO_KJ_MOL
+    )
+    assert barrier["level_of_theory"]["label"] == "wb97xd/def2tzvp"
+    # The TS energy block is internally consistent with the chosen LOT.
+    ts_energy = record["transition_state"]["energy"]
+    assert ts_energy["electronic_energy_hartree"] == -114.95
+    assert ts_energy["level_of_theory"]["label"] == "wb97xd/def2tzvp"
+
+
+def test_reaction_export_duplicate_reactant_counted_twice(db_session):
+    """A + A -> B: the same species_entry appears as both reactants
+    (participant_index 1 and 2); its energy and H298 count twice in the
+    barrier and delta_h298."""
+    lot = make_lot(db_session, method="wb97xd", basis="def2tzvp")
+    e_a = _reactant_with_energy(db_session, "C", -40.0, lot, h298=-74.6)
+    e_p = _reactant_with_energy(db_session, "CC", -80.1, lot, h298=-140.0)
+    chem = make_chem_reaction(
+        db_session,
+        reactants=[e_a.species, e_a.species],
+        products=[e_p.species],
+    )
+    rxn_entry = make_reaction_entry(
+        db_session,
+        reaction=chem,
+        reactant_entries=[e_a, e_a],
+        product_entries=[e_p],
+    )
+    _approve(db_session, SubmissionRecordType.reaction_entry, rxn_entry.id)
+
+    ts = make_transition_state(db_session, reaction_entry=rxn_entry)
+    tse = make_transition_state_entry(db_session, transition_state=ts)
+    ts_geo = make_geometry(db_session, natoms=2)
+    attach_geometry_atoms(
+        db_session,
+        geometry=ts_geo,
+        symbols=["C", "C"],
+        coords=[[0.0, 0.0, 0.0], [0.0, 0.0, 1.5]],
+    )
+    ts_calc = make_calculation(
+        db_session,
+        type=CalculationType.sp,
+        transition_state_entry_id=tse.id,
+        lot_id=lot.id,
+    )
+    attach_input_geometry(db_session, calculation=ts_calc, geometry=ts_geo)
+    attach_sp_result(
+        db_session, calculation=ts_calc, electronic_energy_hartree=-80.02
+    )
+
+    lines = list(
+        iter_ml_reactions_ndjson(db_session, reaction_refs=[rxn_entry.public_ref])
+    )
+    (record,) = [p for p in _parse(lines) if p["record_type"] == "ml_reaction"]
+
+    # Both reactant slots are emitted.
+    assert record["reactants_smiles"] == ["C", "C"]
+    assert record["reactant_refs"] == [e_a.public_ref, e_a.public_ref]
+
+    # Barrier subtracts the duplicated reactant's energy twice:
+    # E_TS - 2*E_A = -80.02 - 2*(-40.0) = -0.02 hartree.
+    assert record["barrier"]["electronic_forward_kj_mol"] == pytest.approx(
+        -0.02 * HARTREE_TO_KJ_MOL
+    )
+
+    # delta_h298 counts the duplicated reactant twice:
+    # H298(B) - 2*H298(A) = -140.0 - 2*(-74.6) = 9.2 kJ/mol.
+    assert record["delta_h298_kj_mol"] == pytest.approx(9.2)
+
+
 def test_reaction_export_trust_gate(db_session):
     lot = make_lot(db_session)
     e_a = _reactant_with_energy(db_session, "C", -40.0, lot)

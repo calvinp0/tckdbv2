@@ -338,22 +338,27 @@ def make_chem_reaction(
     session.add(reaction)
     session.flush()
 
-    for sp in reactants:
+    # Collapse duplicates into stoichiometry (A + A -> stoichiometry=2),
+    # mirroring the compressed participant contract of the resolver and
+    # matching the Counter-based hash computed above.
+    from collections import Counter as _Counter
+
+    for sp_id, count in _Counter(sp.id for sp in reactants).items():
         session.add(
             ReactionParticipant(
                 reaction_id=reaction.id,
-                species_id=sp.id,
+                species_id=sp_id,
                 role=ReactionRole.reactant,
-                stoichiometry=1,
+                stoichiometry=count,
             )
         )
-    for sp in products:
+    for sp_id, count in _Counter(sp.id for sp in products).items():
         session.add(
             ReactionParticipant(
                 reaction_id=reaction.id,
-                species_id=sp.id,
+                species_id=sp_id,
                 role=ReactionRole.product,
-                stoichiometry=1,
+                stoichiometry=count,
             )
         )
     session.flush()

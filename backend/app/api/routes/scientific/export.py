@@ -1,6 +1,6 @@
 """Bulk-export endpoints (docs/specs/bulk_export_design.md §3).
 
-Two curator-gated, streaming exports over the scientific surface:
+Four curator-gated, streaming exports over the scientific surface:
 
 * ``GET  /scientific/export/ndjson``  — lossless TCKDB NDJSON, streamed one
   record per line via a server-side generator (never materializes the
@@ -8,10 +8,17 @@ Two curator-gated, streaming exports over the scientific surface:
 * ``POST /scientific/export/chemkin`` — a zip of ``chem.inp`` / ``therm.dat``
   / ``tran.dat`` + ``manifest.json``, ready for Cantera/CHEMKIN. POST
   because it carries options (units, transport, naming policy).
+* ``GET  /scientific/export/ml/species.ndjson`` — ML dataset, one record
+  per ``(species_entry, geometry)``: identity, Cartesian coordinates,
+  LOT-labelled electronic energies, frequencies, optional Hessian, and
+  the thermo summary.
+* ``GET  /scientific/export/ml/reactions.ndjson`` — ML dataset, one record
+  per ``reaction_entry``, RDB7-compatible in spirit: reactant/product
+  SMILES, Arrhenius kinetics, electronic forward barrier, TS geometry.
 
-Both are above the normal read cap, so they are gated on the curator/admin
+All are above the normal read cap, so they are gated on the curator/admin
 role. Thin handlers over
-``app.services.scientific_read.{export,chemkin_serialize}``.
+``app.services.scientific_read.{export,chemkin_serialize,ml_dataset}``.
 """
 
 from __future__ import annotations
@@ -207,6 +214,10 @@ def export_ml_species(
     Cartesian geometry, LOT-labelled electronic energies, frequencies,
     optional Hessian, and the species thermo summary. Curator/admin only.
 
+    ``min_review_status`` defaults to ``approved``; on a pre-curation
+    corpus (nothing approved yet) that exports zero records — pass
+    ``min_review_status=under_review`` (or lower) to export uncurated data.
+
     :raises ValueError: 422 for an empty/unresolvable seed, an unknown
         ``lot_ref``, or an ``all`` request over the export cap.
     """
@@ -256,6 +267,10 @@ def export_ml_reactions(
     column mapping is documented on
     ``app.services.scientific_read.ml_dataset.MLReactionRecord``.
     Curator/admin only.
+
+    ``min_review_status`` defaults to ``approved``; on a pre-curation
+    corpus (nothing approved yet) that exports zero records — pass
+    ``min_review_status=under_review`` (or lower) to export uncurated data.
 
     :raises ValueError: 422 for an empty/unresolvable seed or an ``all``
         request over the export cap.
