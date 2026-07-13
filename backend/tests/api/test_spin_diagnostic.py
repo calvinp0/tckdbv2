@@ -19,7 +19,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from app.db.models.calculation import CalcSpinDiagnostic
+from app.db.models.calculation import CalculationSpinDiagnostic
 from app.schemas.fragments.calculation import SpinDiagnosticPayload
 
 KEY_HEADER = "Idempotency-Key"
@@ -132,7 +132,7 @@ class TestDBCheckConstraints:
         calc_id = _latest_calc_id(client)
         values = {"s_squared": 2.0}
         values[field] = -0.01
-        db_session.add(CalcSpinDiagnostic(calculation_id=calc_id, **values))
+        db_session.add(CalculationSpinDiagnostic(calculation_id=calc_id, **values))
         with pytest.raises(IntegrityError):
             db_session.flush()
         db_session.rollback()
@@ -148,7 +148,7 @@ class TestModelRoundTrip:
         client.post("/api/v1/uploads/conformers", json=_conformer_payload())
         calc_id = _latest_calc_id(client)
         db_session.add(
-            CalcSpinDiagnostic(
+            CalculationSpinDiagnostic(
                 calculation_id=calc_id,
                 s_squared=2.0104,
                 s_squared_expected=0.75,
@@ -158,7 +158,7 @@ class TestModelRoundTrip:
         )
         db_session.flush()
 
-        row = db_session.scalar(select(CalcSpinDiagnostic).where(CalcSpinDiagnostic.calculation_id == calc_id))
+        row = db_session.scalar(select(CalculationSpinDiagnostic).where(CalculationSpinDiagnostic.calculation_id == calc_id))
         assert row is not None
         assert row.s_squared == pytest.approx(2.0104)
         assert row.s_squared_expected == pytest.approx(0.75)
@@ -179,7 +179,7 @@ class TestUploadPersistence:
         )
         assert resp.status_code == 201, resp.text
 
-        rows = db_session.scalars(select(CalcSpinDiagnostic)).all()
+        rows = db_session.scalars(select(CalculationSpinDiagnostic)).all()
         assert len(rows) == 1
         assert rows[0].s_squared == pytest.approx(2.0104)
         assert rows[0].s_squared_expected is None
@@ -199,7 +199,7 @@ class TestUploadPersistence:
         )
         assert resp.status_code == 201, resp.text
 
-        row = db_session.scalar(select(CalcSpinDiagnostic))
+        row = db_session.scalar(select(CalculationSpinDiagnostic))
         assert row is not None
         assert row.s_squared == pytest.approx(2.0104)
         assert row.s_squared_expected == pytest.approx(0.75)
@@ -210,7 +210,7 @@ class TestUploadPersistence:
         resp = client.post("/api/v1/uploads/conformers", json=_conformer_payload())
         assert resp.status_code == 201, resp.text
 
-        count = db_session.scalar(select(func.count()).select_from(CalcSpinDiagnostic))
+        count = db_session.scalar(select(func.count()).select_from(CalculationSpinDiagnostic))
         assert count == 0
 
     def test_upload_missing_s_squared_returns_422(self, client):
@@ -261,7 +261,7 @@ class TestIdempotency:
         assert second.status_code == 201
         assert second.headers.get(REPLAYED_HEADER) == "true"
 
-        count = db_session.scalar(select(func.count()).select_from(CalcSpinDiagnostic))
+        count = db_session.scalar(select(func.count()).select_from(CalculationSpinDiagnostic))
         assert count == 1
 
 

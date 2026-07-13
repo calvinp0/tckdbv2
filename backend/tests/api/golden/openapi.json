@@ -4318,7 +4318,7 @@
       },
       "CalculationIn": {
         "additionalProperties": false,
-        "description": "A calculation defined within this upload.\n\n:param key: Globally unique local key for this calculation.\n:param type: Calculation type (opt, freq, sp, irc, scan).\n:param quality: Curation quality flag.\n:param geometry_key: Local key referencing a geometry defined elsewhere\n    in the payload. For species calculations, typically points to a\n    conformer's geometry. For TS calculations, defaults to the TS geometry.\n:param software_release: Required software provenance reference.\n:param level_of_theory: Required level-of-theory reference.\n:param workflow_tool_release: Optional workflow-tool provenance reference.\n:param literature_id: Optional literature provenance id.\n:param sp_electronic_energy_hartree: SP result (if type=sp).\n:param opt_converged: Opt result (if type=opt).\n:param opt_n_steps: Opt result (if type=opt).\n:param opt_final_energy_hartree: Opt result (if type=opt).\n:param freq_n_imag: Freq result (if type=freq).\n:param freq_imag_freq_cm1: Freq result (if type=freq).\n:param freq_zpe_hartree: Freq result (if type=freq).\n:param parameters: Optional parsed execution-control parameter observations,\n    routed through the shared calculation persistence seam.\n:param parameters_json: Optional JSON snapshot from the parser.\n:param parameters_parser_version: Optional parser version tag.\n:param parameters_extracted_at: Optional extraction timestamp.\n:param artifacts: Optional list of file artifacts (logs, inputs, etc.).",
+        "description": "A calculation defined within this upload.\n\n:param key: Globally unique local key for this calculation.\n:param type: Calculation type (opt, freq, sp, irc, scan).\n:param quality: Curation quality flag.\n:param geometry_key: Local key referencing a geometry defined elsewhere\n    in the payload. For species calculations, typically points to a\n    conformer's geometry. For TS calculations, defaults to the TS geometry.\n:param software_release: Required software provenance reference.\n:param level_of_theory: Required level-of-theory reference.\n:param workflow_tool_release: Optional workflow-tool provenance reference.\n:param literature_id: Optional literature provenance id.\n:param sp_electronic_energy_hartree: SP result (if type=sp).\n:param opt_converged: Opt result (if type=opt).\n:param opt_n_steps: Opt result (if type=opt).\n:param opt_final_energy_hartree: Opt result (if type=opt).\n:param freq_n_imag: Freq result (if type=freq).\n:param freq_imag_freq_cm1: Freq result (if type=freq).\n:param freq_zpe_hartree: Freq result (if type=freq).\n:param parameters: Optional parsed execution-control parameter observations,\n    routed through the shared calculation persistence seam.\n:param parameters_json: Optional JSON snapshot from the parser.\n:param parameters_parser_version: Optional parser version tag.\n:param parameters_extracted_at: Optional extraction timestamp.\n:param wavefunction_diagnostic: Optional inline T1/D1 wavefunction\n    diagnostic, forwarded to the shared calculation persistence seam.\n:param spin_diagnostic: Optional inline spin-contamination ``<S^2>``\n    diagnostic, forwarded to the shared calculation persistence seam.\n:param artifacts: Optional list of file artifacts (logs, inputs, etc.).",
         "properties": {
           "artifacts": {
             "items": {
@@ -4516,8 +4516,28 @@
             ],
             "title": "Sp Electronic Energy Hartree"
           },
+          "spin_diagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpinDiagnosticPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "type": {
             "$ref": "#/components/schemas/CalculationType"
+          },
+          "wavefunction_diagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WavefunctionDiagnosticPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "workflow_tool_release": {
             "anyOf": [
@@ -8619,8 +8639,28 @@
             ],
             "title": "Sp Electronic Energy Hartree"
           },
+          "spin_diagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpinDiagnosticPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "type": {
             "$ref": "#/components/schemas/CalculationType"
+          },
+          "wavefunction_diagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WavefunctionDiagnosticPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "workflow_tool_release": {
             "anyOf": [

@@ -51,6 +51,7 @@ from tests.services.scientific_read._factories import (
     attach_output_geometry,
     attach_scf_stability,
     attach_sp_result,
+    attach_spin_diagnostic,
     make_calculation,
     make_geometry,
     make_lot,
@@ -1973,6 +1974,21 @@ def test_detail_scf_stability_omitted_when_not_requested(client, db_session):
         f"/api/v1/scientific/calculations/{calc.public_ref}"
     ).json()
     assert "scf_stability" not in body["record"]
+
+
+def test_detail_spin_diagnostic_omitted_when_not_requested(client, db_session):
+    """The ``spin_diagnostic`` key must be ABSENT (not ``null``) from a
+    default calculation read that did not request it. Contract: key absent
+    means "not asked"; key present + ``null`` means "asked, no row". A row
+    exists here precisely to prove the omission is driven by the include
+    request, not by the row's absence.
+    """
+    _, _, calc = _make_species_owned_calc(db_session)
+    attach_spin_diagnostic(db_session, calculation=calc)
+    body = client.get(
+        f"/api/v1/scientific/calculations/{calc.public_ref}"
+    ).json()
+    assert "spin_diagnostic" not in body["record"]
 
 
 def test_detail_include_scf_stability_returns_summary(client, db_session):

@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.errors import NotFoundError
 from app.db.models.calculation import (
-    CalcSpinDiagnostic,
     Calculation,
     CalculationArtifact,
     CalculationConstraint,
@@ -34,6 +33,7 @@ from app.db.models.calculation import (
     CalculationScanPoint,
     CalculationScanResult,
     CalculationSCFStability,
+    CalculationSpinDiagnostic,
     CalculationSPResult,
     CalculationWavefunctionDiagnostic,
 )
@@ -742,7 +742,7 @@ def _build_provenance_and_sections(
     )
 
     has_spin_diagnostic = _exists_for_calc(
-        session, CalcSpinDiagnostic, calculation_id
+        session, CalculationSpinDiagnostic, calculation_id
     )
 
     converged = _load_converged_flag(session, calc, calculation_id)
@@ -1823,8 +1823,8 @@ def _build_spin_diagnostic(
     interpreting spin contamination are deliberately not applied here.
     """
     row = session.scalar(
-        select(CalcSpinDiagnostic).where(
-            CalcSpinDiagnostic.calculation_id == calculation_id
+        select(CalculationSpinDiagnostic).where(
+            CalculationSpinDiagnostic.calculation_id == calculation_id
         )
     )
     if row is None:

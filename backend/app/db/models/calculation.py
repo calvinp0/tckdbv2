@@ -269,7 +269,7 @@ class Calculation(Base, TimestampMixin, CreatedByMixin, PublicRefMixin):
         cascade="all, delete-orphan",
         uselist=False,
     )
-    spin_diagnostic: Mapped[Optional["CalcSpinDiagnostic"]] = relationship(
+    spin_diagnostic: Mapped[Optional["CalculationSpinDiagnostic"]] = relationship(
         back_populates="calculation",
         cascade="all, delete-orphan",
         uselist=False,
@@ -1456,7 +1456,7 @@ class CalculationWavefunctionDiagnostic(Base, TimestampMixin, CreatedByMixin):
     )
 
 
-class CalcSpinDiagnostic(Base, TimestampMixin, CreatedByMixin):
+class CalculationSpinDiagnostic(Base, TimestampMixin, CreatedByMixin):
     """Parsed spin-contamination ``<S^2>`` evidence for a calculation.
 
     The companion to :class:`CalculationWavefunctionDiagnostic`: where that
