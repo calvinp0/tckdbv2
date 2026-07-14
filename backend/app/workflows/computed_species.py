@@ -849,6 +849,12 @@ def _persist_statmech_block(
         scan_calc_id: int | None = None
         if torsion_in.source_scan_calculation_key is not None:
             scan_calc_row = calc_keys_to_id[torsion_in.source_scan_calculation_key]
+            if scan_calc_row.species_entry_id != species_entry_id:
+                raise ValueError(
+                    f"statmech.torsions source_scan_calculation_key="
+                    f"'{torsion_in.source_scan_calculation_key}': refers to a "
+                    f"calculation owned by a different species entry."
+                )
             scan_calc_id = scan_calc_row.id
 
         torsion = StatmechTorsion(

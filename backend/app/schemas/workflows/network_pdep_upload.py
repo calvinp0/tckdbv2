@@ -758,18 +758,43 @@ class NetworkPDepUploadRequest(SchemaBase):
                     f"undefined geometry_key '{calc.geometry_key}'."
                 )
 
-        # Species statmech source_calculations must reference defined calc keys
-        # (mirrors the solve.source_calculations check below, against the same
-        # global calc-key namespace).
+        # Species statmech references must resolve against that species's OWN
+        # calculations only. A species statmech can only be sourced from that
+        # species's calculations (the persistence seam enforces species-entry
+        # ownership at runtime); scoping here turns what would otherwise be a
+        # persist-time KeyError/ownership error into a clean 422.
         for sp in self.species:
             if sp.statmech is None:
                 continue
+            own_calc_types: dict[str, CalculationType] = {}
+            for conf in sp.conformers:
+                own_calc_types[conf.calculation.key] = conf.calculation.type
+            for calc in sp.calculations:
+                own_calc_types[calc.key] = calc.type
+
             for sc in sp.statmech.source_calculations:
-                if sc.calculation_key not in calculation_keys:
+                if sc.calculation_key not in own_calc_types:
                     raise ValueError(
                         f"Species '{sp.key}' statmech.source_calculations "
-                        f"references undefined calculation_key "
-                        f"'{sc.calculation_key}'."
+                        f"references calculation_key '{sc.calculation_key}', "
+                        f"which is not one of that species's own calculations."
+                    )
+
+            for i, t in enumerate(sp.statmech.torsions):
+                scan_key = t.source_scan_calculation_key
+                if scan_key is None:
+                    continue
+                if scan_key not in own_calc_types:
+                    raise ValueError(
+                        f"Species '{sp.key}' statmech.torsions[{i}]."
+                        f"source_scan_calculation_key '{scan_key}' is not one "
+                        f"of that species's own calculations."
+                    )
+                if own_calc_types[scan_key] != CalculationType.scan:
+                    raise ValueError(
+                        f"Species '{sp.key}' statmech.torsions[{i}]."
+                        f"source_scan_calculation_key '{scan_key}' must "
+                        f"reference a scan-type calculation."
                     )
 
         # Bath gas species must reference defined species
