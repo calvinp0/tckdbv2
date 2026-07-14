@@ -54,11 +54,22 @@ import tempfile
 
 import numpy as np
 
-API_BASE = "https://tckdb.homecalvin.com/api/v1/scientific"
-PI_SSH = "calvin@100.85.114.78"
-DB_CONTAINER = "tckdbv2-db-1"
-ARKANE_ENTRY = "/home/calvin/code/RMG-Py/Arkane.py"
-RMG_ENV = "rmg_env"
+# Deployment-specific endpoints are read from the environment so this harness
+# is reproducible against any TCKDB instance and no infra topology is committed.
+# Set before running:
+#   TCKDB_API_BASE      scientific read API base, e.g. https://<host>/api/v1/scientific
+#   TCKDB_DB_SSH        ssh target for the DB host (ONLY needed for the two
+#                       DB-only statmech fields; see docs/validation findings)
+#   TCKDB_DB_CONTAINER  postgres container name (default: tckdbv2-db-1)
+#   ARKANE_ENTRY        path to RMG-Py Arkane.py
+#   RMG_ENV             conda env that has Arkane (default: rmg_env)
+API_BASE = os.environ.get(
+    "TCKDB_API_BASE", "http://localhost:8000/api/v1/scientific"
+)
+PI_SSH = os.environ.get("TCKDB_DB_SSH")  # required only for the DB-only fields
+DB_CONTAINER = os.environ.get("TCKDB_DB_CONTAINER", "tckdbv2-db-1")
+ARKANE_ENTRY = os.environ.get("ARKANE_ENTRY", "/home/calvin/code/RMG-Py/Arkane.py")
+RMG_ENV = os.environ.get("RMG_ENV", "rmg_env")
 
 HARTREE_TO_KJMOL = 2625.499638
 R_GAS = 8.31446  # J/mol/K
@@ -96,6 +107,12 @@ def api_get(path: str) -> dict:
 
 def db_query(sql: str) -> list[list[str]]:
     """Run a read-only psql query on the live Pi and return rows of columns."""
+    if not PI_SSH:
+        raise RuntimeError(
+            "TCKDB_DB_SSH is not set. Per-mode frequencies and optical_isomers "
+            "are DB-only (not on the public read API), so this harness needs an "
+            "ssh target for the DB host to fetch them. Set TCKDB_DB_SSH."
+        )
     remote = (
         f"docker exec {DB_CONTAINER} psql -U tckdb -d tckdb -t -A -F'|' "
         f"-c {shlex.quote(sql)}"
