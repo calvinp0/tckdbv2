@@ -559,7 +559,7 @@ def persist_computed_species_upload(
 
         statmech_row = _persist_statmech_block(
             session,
-            request,
+            request.statmech,
             species_entry_id=species_entry.id,
             calc_keys_to_id=calc_keys_to_id,
             created_by=created_by,
@@ -761,26 +761,26 @@ def _persist_top_level_applied_corrections(
 
 def _persist_statmech_block(
     session: Session,
-    request: ComputedSpeciesUploadRequest,
+    statmech: StatmechInBundle | None,
     *,
     species_entry_id: int,
     calc_keys_to_id: dict[str, Calculation],
     created_by: int | None,
 ) -> Statmech | None:
-    """Persist the bundle's optional statmech block.
+    """Persist an optional statmech block.
 
-    Mirrors the inline statmech persistence in computed-reaction. The
-    frequency scale factor is resolved through the unified
-    ``resolve_or_create_freq_scale_factor_ref`` and linked through
-    ``statmech.frequency_scale_factor_id``. Source calculations are
-    resolved against the bundle's global calc-key namespace and
-    written as ``StatmechSourceCalculation`` rows; an applied
+    Shared seam consumed by both the computed-species bundle workflow and
+    the pressure-dependent network workflow. The frequency scale factor is
+    resolved through the unified ``resolve_or_create_freq_scale_factor_ref``
+    and linked through ``statmech.frequency_scale_factor_id``. Source
+    calculations are resolved against the caller's global calc-key namespace
+    and written as ``StatmechSourceCalculation`` rows; an applied
     energy-correction row is never produced for FSF here.
     """
-    if request.statmech is None:
+    if statmech is None:
         return None
 
-    s: StatmechInBundle = request.statmech
+    s: StatmechInBundle = statmech
 
     literature = (
         resolve_or_create_literature(session, s.literature)

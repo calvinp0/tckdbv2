@@ -996,3 +996,48 @@ def test_pdep_channel_kinetics_rejects_plog_model_kind() -> None:
     ]
     with pytest.raises(ValueError, match="not yet supported"):
         NetworkPDepUploadRequest(**payload)
+
+
+def test_pdep_species_statmech_persists_via_shared_seam(db_engine) -> None:
+    """A network species carrying a statmech block persists a Statmech row
+    (external_symmetry / optical_isomers) with a resolved source-calc link,
+    reusing the computed-species bundle's shared statmech seam."""
+    from app.db.models.statmech import Statmech, StatmechSourceCalculation
+
+    payload = _full_payload(include_solve=False)
+    # Attach statmech to the ethyl species, referencing its own freq calc.
+    ethyl = next(sp for sp in payload["species"] if sp["key"] == "ethyl")
+    ethyl["statmech"] = {
+        "external_symmetry": 2,
+        "optical_isomers": 2,
+        "point_group": "C2",
+        "source_calculations": [
+            {"calculation_key": "ethyl_freq", "role": "freq"},
+        ],
+    }
+
+    with Session(db_engine) as session, session.begin():
+        request = NetworkPDepUploadRequest(**payload)
+        persist_network_pdep_upload(session, request, created_by=None)
+
+        statmechs = session.scalars(select(Statmech)).all()
+        assert len(statmechs) == 1
+        sm = statmechs[0]
+        assert sm.external_symmetry == 2
+        assert sm.optical_isomers == 2
+        assert sm.point_group == "C2"
+
+        # The statmech is owned by a species entry, and its source-calc link
+        # resolved to a calculation owned by that same species entry.
+        source_links = session.scalars(
+            select(StatmechSourceCalculation).where(
+                StatmechSourceCalculation.statmech_id == sm.id
+            )
+        ).all()
+        assert len(source_links) == 1
+        link = source_links[0]
+        assert link.role.value == "freq"
+
+        linked_calc = session.get(Calculation, link.calculation_id)
+        assert linked_calc is not None
+        assert linked_calc.species_entry_id == sm.species_entry_id

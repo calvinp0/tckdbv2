@@ -53,6 +53,7 @@ from tckdb_schemas.shared.calculation_in import (
     GeometryIn,
     calculation_in_to_with_results_payload,
 )
+from tckdb_schemas.workflows.computed_species_upload import StatmechInBundle
 
 from app.schemas.utils import normalize_optional_text
 from app.schemas.workflows.literature_upload import LiteratureUploadRequest
@@ -113,6 +114,10 @@ class NetworkSpeciesIn(SchemaBase):
         Their ``geometry_key`` must point to one of this species's conformer
         geometries so the backend can anchor each calculation to the correct
         conformer observation.
+    :param statmech: Optional statistical-mechanics interpretation for this
+        species (external symmetry, optical isomers, hindered rotors, etc.).
+        Reuses the bundle's statmech payload; ``source_calculations`` reference
+        calculation keys defined anywhere in this request.
     """
 
     key: str = Field(min_length=1)
@@ -121,6 +126,7 @@ class NetworkSpeciesIn(SchemaBase):
     conformers: list[ConformerIn] = Field(default_factory=list)
     calculations: list[CalculationIn] = Field(default_factory=list)
     transport: TransportUploadPayload | None = None
+    statmech: StatmechInBundle | None = None
 
     @model_validator(mode="after")
     def normalize_text(self) -> Self:
@@ -751,6 +757,20 @@ class NetworkPDepUploadRequest(SchemaBase):
                     f"Calculation '{calc.key}' in {context} references "
                     f"undefined geometry_key '{calc.geometry_key}'."
                 )
+
+        # Species statmech source_calculations must reference defined calc keys
+        # (mirrors the solve.source_calculations check below, against the same
+        # global calc-key namespace).
+        for sp in self.species:
+            if sp.statmech is None:
+                continue
+            for sc in sp.statmech.source_calculations:
+                if sc.calculation_key not in calculation_keys:
+                    raise ValueError(
+                        f"Species '{sp.key}' statmech.source_calculations "
+                        f"references undefined calculation_key "
+                        f"'{sc.calculation_key}'."
+                    )
 
         # Bath gas species must reference defined species
         if self.solve:
