@@ -43,11 +43,11 @@ from .arkane_pdep_parser import (
     parse_all_conformers,
     parse_data_file,
     parse_input_file,
-    parse_pdep_reactions,
+    parse_pdep_reactions_with_skips,
     parse_supporting_information,
     resolve_log_path,
 )
-from .units import j_mol_to_hartree, kcal_mol_to_cm_inv
+from .units import atm_to_bar, j_mol_to_hartree, kcal_mol_to_cm_inv
 
 # Software / provenance constants for this run (per the run's input.py header).
 _GAUSSIAN = {"name": "Gaussian", "version": "09"}
@@ -61,6 +61,7 @@ class _ParsedRun:
     inp: object
     conformers: dict[str, ArkaneConformer]
     fits: list[ChebyshevFit]
+    pdep_skips: list
     csv: dict[str, SupportingInfo]
     data_files: dict[str, DataFile]
 
@@ -71,12 +72,37 @@ class GapReport:
 
     species_built: list[str] = field(default_factory=list)
     species_skipped: list[tuple[str, str]] = field(default_factory=list)
+    species_with_statmech: list[str] = field(default_factory=list)
     ts_built: list[str] = field(default_factory=list)
     ts_stub_no_geometry: list[str] = field(default_factory=list)
     channels_built: int = 0
     channels_unmapped: list[tuple[str, str]] = field(default_factory=list)
+    channels_duplicate: list[tuple[str, str]] = field(default_factory=list)
+    pdep_non_chebyshev: list[tuple[str, str, str]] = field(default_factory=list)
     micro_reactions: int = 0
+    torsions_emitted: list[str] = field(default_factory=list)
     unstorable_fields: list[str] = field(default_factory=list)
+    followups: list[str] = field(default_factory=list)
+
+
+def _fit_bounds_bar_kelvin(fit: ChebyshevFit) -> tuple[float, float]:
+    """Return (pmin_bar, pmax_bar), honouring the fit's labelled pressure unit.
+
+    Nit (Fable): do not assume bar. ``output.py`` labels this run's Chebyshev
+    domain in bar; the generic path must convert atm and reject anything else,
+    and must verify the temperature axis is Kelvin.
+    """
+    if fit.temperature_units not in ("K", "kelvin"):
+        raise ValueError(
+            f"Chebyshev temperature units must be K, got {fit.temperature_units!r}."
+        )
+    if fit.pressure_units == "bar":
+        return fit.pmin_value, fit.pmax_value
+    if fit.pressure_units == "atm":
+        return atm_to_bar(fit.pmin_value), atm_to_bar(fit.pmax_value)
+    raise ValueError(
+        f"Chebyshev pressure units must be bar or atm, got {fit.pressure_units!r}."
+    )
 
 
 def _load_run(run_dir: Path) -> _ParsedRun:
@@ -84,7 +110,7 @@ def _load_run(run_dir: Path) -> _ParsedRun:
     inp = parse_input_file((run_dir / "input.py").read_text())
     out_text = (run_dir / "output.py").read_text()
     conformers = parse_all_conformers(out_text)
-    fits = parse_pdep_reactions(out_text)
+    fits, pdep_skips = parse_pdep_reactions_with_skips(out_text)
     csv_path = run_dir / "supporting_information.csv"
     csv = parse_supporting_information(csv_path) if csv_path.exists() else {}
 
@@ -99,7 +125,7 @@ def _load_run(run_dir: Path) -> _ParsedRun:
             p = run_dir / ts.data_file
             if p.exists():
                 data_files[label] = parse_data_file(p.read_text())
-    return _ParsedRun(run_dir, inp, conformers, fits, csv, data_files)
+    return _ParsedRun(run_dir, inp, conformers, fits, pdep_skips, csv, data_files)
 
 
 def _lot_opt(inp) -> dict:
@@ -127,6 +153,88 @@ def _artifact(path: Path) -> dict | None:
         "sha256": hashlib.sha256(content).hexdigest(),
         "bytes": len(content),
     }
+
+
+def _build_statmech(
+    inp,
+    info: SupportingInfo,
+    conf: ArkaneConformer | None,
+    scan_key: str | None,
+    *,
+    freq_key: str | None,
+    sp_key: str | None,
+) -> dict | None:
+    """Build a ``StatmechInBundle`` dict for one reactive species.
+
+    Carries the statistical-mechanics scalars parsed from the CSV/output.py
+    (external symmetry, optical isomers, point group, rotor kind, treatment,
+    frequency scale factor) and links source calculations owned by THIS
+    species. N2H4's hindered rotor is emitted as a torsion referencing the
+    species-local ``scan``-type calculation.
+    """
+    statmech: dict = {"scientific_origin": "computed"}
+    if info.symmetry_number is not None:
+        statmech["external_symmetry"] = info.symmetry_number
+    if info.optical_isomers is not None:
+        statmech["optical_isomers"] = info.optical_isomers
+    if info.point_group:
+        statmech["point_group"] = info.point_group
+    if conf is not None:
+        if conf.is_linear is not None:
+            statmech["is_linear"] = conf.is_linear
+        if conf.rigid_rotor_kind:
+            statmech["rigid_rotor_kind"] = conf.rigid_rotor_kind
+        if conf.statmech_treatment:
+            statmech["statmech_treatment"] = conf.statmech_treatment
+    # Arkane statmech uses projected frequencies (external/torsional modes
+    # removed from the harmonic list before partition functions).
+    statmech["uses_projected_frequencies"] = True
+
+    if inp.freq_scale_factor is not None:
+        statmech["freq_scale_factor"] = {
+            "level_of_theory": _lot_opt(inp),
+            "scale_kind": "fundamental",
+            "value": inp.freq_scale_factor,
+            "software": {"name": _GAUSSIAN["name"]},
+        }
+
+    source_calcs: list[dict] = []
+    if freq_key:
+        source_calcs.append({"calculation_key": freq_key, "role": "freq"})
+    if sp_key:
+        source_calcs.append({"calculation_key": sp_key, "role": "sp"})
+    if source_calcs:
+        statmech["source_calculations"] = source_calcs
+
+    # Torsions: one per output.py HinderedRotor, referencing the species's own
+    # scan calculation (present only when a scanLog existed in Data/<x>.py).
+    if conf and conf.hindered_rotors and scan_key:
+        torsions = []
+        for i, hr in enumerate(conf.hindered_rotors):
+            torsions.append(
+                {
+                    "torsion_index": i + 1,
+                    "symmetry_number": hr.symmetry_number,
+                    "treatment_kind": hr.treatment,  # 'hindered_rotor'/'free_rotor'
+                    "dimension": 1,
+                    "source_scan_calculation_key": scan_key,
+                }
+            )
+        statmech["torsions"] = torsions
+
+    # Nothing worth persisting beyond scientific_origin/projected-flag?
+    meaningful = any(
+        k in statmech
+        for k in (
+            "external_symmetry",
+            "optical_isomers",
+            "point_group",
+            "rigid_rotor_kind",
+            "source_calculations",
+            "torsions",
+        )
+    )
+    return statmech if meaningful else None
 
 
 def _state_key(labels: list[str]) -> str:
@@ -273,9 +381,11 @@ def build_network_pdep_payload(
             calculations.append(sp_calc)
 
         # Hindered-rotor scan calc (N2H4 only, from Data rotors + output.py).
+        scan_key: str | None = None
         if data and data.scan_logs:
+            scan_key = f"{label}_scan"
             scan_calc: dict = {
-                "key": f"{label}_scan",
+                "key": scan_key,
                 "type": "scan",
                 "geometry_key": geom_key,
                 "software_release": _GAUSSIAN,
@@ -287,28 +397,34 @@ def build_network_pdep_payload(
                     scan_calc["artifacts"] = [art]
             calculations.append(scan_calc)
 
-        species_payloads.append(
-            {
-                "key": label,
-                "species_entry": {
-                    "smiles": sp.smiles,
-                    "charge": 0,
-                    "multiplicity": mult,
-                },
-                "label": label,
-                "conformers": [conformer],
-                "calculations": calculations,
-            }
+        # Statmech interpretation (PR #19 added NetworkSpeciesIn.statmech).
+        statmech = _build_statmech(
+            inp,
+            info,
+            conf,
+            scan_key,
+            freq_key=species_freq_key.get(label),
+            sp_key=species_sp_key.get(label),
         )
+        if statmech is not None and statmech.get("torsions"):
+            gap.torsions_emitted.append(label)
+
+        species_dict: dict = {
+            "key": label,
+            "species_entry": {
+                "smiles": sp.smiles,
+                "charge": 0,
+                "multiplicity": mult,
+            },
+            "label": label,
+            "conformers": [conformer],
+            "calculations": calculations,
+        }
+        if statmech is not None:
+            species_dict["statmech"] = statmech
+            gap.species_with_statmech.append(label)
+        species_payloads.append(species_dict)
         gap.species_built.append(label)
-        # optical_isomers / external_symmetry have no home in NetworkSpeciesIn
-        # (no statmech field) nor in SpeciesEntryIdentityPayload.
-        if (info.optical_isomers or 1) != 1 or (info.symmetry_number or 1) != 1:
-            if "optical_isomers/external_symmetry (no statmech field on NetworkSpeciesIn)" \
-                    not in gap.unstorable_fields:
-                gap.unstorable_fields.append(
-                    "optical_isomers/external_symmetry (no statmech field on NetworkSpeciesIn)"
-                )
 
     built_species = {p["key"] for p in species_payloads}
 
@@ -477,8 +593,10 @@ def build_network_pdep_payload(
             continue
         pair = (src, snk)
         if pair in seen_channel_pairs:
+            gap.channels_duplicate.append(pair)
             continue
         seen_channel_pairs.add(pair)
+        pmin_bar, pmax_bar = _fit_bounds_bar_kelvin(fit)  # honours atm/bar; K
         kind = _KIND.get((state_kind[src], state_kind[snk]), "isomerization")
         channels.append(
             {"source_state_key": src, "sink_state_key": snk, "kind": kind}
@@ -493,17 +611,21 @@ def build_network_pdep_payload(
                     "n_pressure": fit.n_pressure,
                     "coefficients": fit.coefficients,
                 },
-                "tmin_k": fit.tmin_k,
-                "tmax_k": fit.tmax_k,
-                "pmin_bar": fit.pmin_value,   # output.py labels this bar
-                "pmax_bar": fit.pmax_value,
+                "tmin_k": fit.tmin_value,
+                "tmax_k": fit.tmax_value,
+                "pmin_bar": pmin_bar,
+                "pmax_bar": pmax_bar,
                 "rate_units": map_a_units(fit.kunits),
-                "pressure_units": "bar",
+                "pressure_units": "bar",  # normalised to bar above
                 "temperature_units": "kelvin",
                 "stores_log10_k": True,
             }
         )
     gap.channels_built = len(channels)
+    for sk in run.pdep_skips:
+        gap.pdep_non_chebyshev.append(
+            ("+".join(sk.reactants), "+".join(sk.products), sk.reason)
+        )
 
     # ------------------------------------------------------------------
     # Solve
@@ -521,6 +643,12 @@ def build_network_pdep_payload(
     }
     if pd and pd.grain_size_units == "kcal/mol":
         solve["grain_size_cm_inv"] = kcal_mol_to_cm_inv(pd.grain_size_value)
+    elif pd and pd.grain_size_units:
+        # Fail-loud: only kcal/mol is convertible here.
+        gap.followups.append(
+            f"grain size units {pd.grain_size_units!r} not converted "
+            f"(only kcal/mol supported); grain_size_cm_inv omitted"
+        )
     if pd and pd.grain_count:
         solve["grain_count"] = pd.grain_count
 
@@ -562,10 +690,12 @@ def build_network_pdep_payload(
     if source_calcs:
         solve["source_calculations"] = source_calcs
 
+    network_name = inp.network_label or "pdep_network"
     request_dict = {
-        "name": inp_network_name(inp),
+        "name": network_name,
         "description": (
-            "Hydrazine pressure-dependent network (MRCI+Davidson//wB97X-D), "
+            f"Pressure-dependent network '{network_name}' "
+            f"({inp.energy_method or 'ab-initio'}//{inp.opt_method or 'DFT'}), "
             "parsed from an Arkane run by scripts/pdep_ingestion."
         ),
         "workflow_tool_release": _ARKANE,
@@ -577,7 +707,3 @@ def build_network_pdep_payload(
         "solve": solve,
     }
     return request_dict, gap
-
-
-def inp_network_name(inp) -> str:
-    return "hydrazine"

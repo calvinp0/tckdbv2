@@ -153,10 +153,26 @@ def test_fixture_builds_valid_request() -> None:
     assert et.t_exponent == 0.52
 
 
-def test_fixture_reports_optical_isomers_gap() -> None:
-    _payload, gap = build_network_pdep_payload(FIXTURE_DIR)
-    # optical_isomers/external_symmetry have no home in NetworkSpeciesIn.
-    assert any("optical_isomers" in f for f in gap.unstorable_fields)
+def test_fixture_emits_statmech_and_closes_gap() -> None:
+    payload, gap = build_network_pdep_payload(FIXTURE_DIR)
+    # optical_isomers/external_symmetry are now storable (PR #19) -> no gap.
+    assert gap.unstorable_fields == []
+    # Every reactive species carries a statmech block.
+    assert set(gap.species_with_statmech) == {"N2H4", "H2NN", "H2"}
+
+    n2h4 = next(s for s in payload["species"] if s["key"] == "N2H4")
+    stm = n2h4["statmech"]
+    assert stm["external_symmetry"] == 2
+    assert stm["optical_isomers"] == 2
+    assert stm["point_group"] == "C2"
+    assert stm["freq_scale_factor"]["value"] == 0.986
+    # N2H4's hindered rotor -> a torsion referencing its own scan calc.
+    assert gap.torsions_emitted == ["N2H4"]
+    assert stm["torsions"][0]["source_scan_calculation_key"] == "N2H4_scan"
+    # source_calculations reference N2H4's own freq/sp calcs.
+    roles = {sc["role"]: sc["calculation_key"] for sc in stm["source_calculations"]}
+    assert roles["freq"] == "N2H4_freq"
+    assert roles["sp"] == "N2H4_sp"
 
 
 def test_fixture_artifacts_resolve_local_log_paths() -> None:
@@ -301,6 +317,45 @@ def test_fixture_full_pipeline_persist_and_read_back(db_engine) -> None:
         ).all()
         assert len(et_rows) == 1
         assert et_rows[0].alpha0_cm_inv == 175.0
+
+        # -- Statmech round-trips (PR #19 closed the optical_isomers gap) --
+        from app.db.models.statmech import (
+            Statmech,
+            StatmechSourceCalculation,
+            StatmechTorsion,
+        )
+
+        n2h4_stm = session.scalars(
+            select(Statmech).where(Statmech.species_entry_id == n2h4_se_id)
+        ).one()
+        assert n2h4_stm.external_symmetry == 2
+        assert n2h4_stm.optical_isomers == 2
+        assert n2h4_stm.point_group == "C2"
+
+        stm_sources = session.scalars(
+            select(StatmechSourceCalculation).where(
+                StatmechSourceCalculation.statmech_id == n2h4_stm.id
+            )
+        ).all()
+        # freq + sp source calcs, both owned by N2H4.
+        assert {s.role.value for s in stm_sources} == {"freq", "sp"}
+        for s in stm_sources:
+            linked = session.get(Calculation, s.calculation_id)
+            assert linked.species_entry_id == n2h4_se_id
+
+        # N2H4 hindered rotor -> torsion linking N2H4's own scan calc.
+        torsions = session.scalars(
+            select(StatmechTorsion).where(
+                StatmechTorsion.statmech_id == n2h4_stm.id
+            )
+        ).all()
+        assert len(torsions) == 1
+        assert torsions[0].source_scan_calculation_id is not None
+        scan_calc = session.get(
+            Calculation, torsions[0].source_scan_calculation_id
+        )
+        assert scan_calc.type == CalculationType.scan
+        assert scan_calc.species_entry_id == n2h4_se_id
 
 
 def test_fixture_full_pipeline_with_artifacts(db_engine, monkeypatch) -> None:

@@ -126,8 +126,9 @@ class ChebyshevFit:
     products: list[str]
     coefficients: list[list[float]]  # n_temperature rows x n_pressure cols
     kunits: str                       # e.g. 's^-1', 'cm^3/(mol*s)'
-    tmin_k: float
-    tmax_k: float
+    tmin_value: float
+    tmax_value: float
+    temperature_units: str            # 'K', as labelled in the file
     pmin_value: float
     pmax_value: float
     pressure_units: str               # 'bar' or 'atm', as labelled in the file
@@ -178,19 +179,37 @@ def _extract_chebyshev_coeffs(block: str) -> list[list[float]]:
     return [[float(v) for v in row] for row in grid]
 
 
-def parse_pdep_reactions(text: str) -> list[ChebyshevFit]:
-    """Parse every *active* ``pdepreaction(...)`` Chebyshev block.
+@dataclass
+class SkippedPdepReaction:
+    """A ``pdepreaction`` block the Chebyshev parser did not turn into a fit."""
 
-    Commented-out blocks (leading ``#``) are dropped first; only Chebyshev
-    kinetics are handled (Phase A of the upload schema is Chebyshev-only).
+    reactants: list[str]
+    products: list[str]
+    reason: str
+
+
+def parse_pdep_reactions_with_skips(
+    text: str,
+) -> tuple[list[ChebyshevFit], list[SkippedPdepReaction]]:
+    """Parse active ``pdepreaction(...)`` blocks, returning fits and skips.
+
+    Commented-out blocks (leading ``#``) are dropped first. Chebyshev blocks
+    become :class:`ChebyshevFit`; any non-Chebyshev block is recorded as a
+    :class:`SkippedPdepReaction` (fail-loud, never silently dropped).
     """
     clean = strip_commented_lines(text)
     fits: list[ChebyshevFit] = []
+    skips: list[SkippedPdepReaction] = []
     for block in _iter_call_blocks(clean, "pdepreaction"):
-        if "Chebyshev(" not in block:
-            continue
         reactants = _extract_str_list(block, "reactants")
         products = _extract_str_list(block, "products")
+        if "Chebyshev(" not in block:
+            kind_m = re.search(r"kinetics\s*=\s*([A-Za-z_]+)\(", block)
+            kind = kind_m.group(1) if kind_m else "unknown"
+            skips.append(
+                SkippedPdepReaction(reactants, products, f"non-Chebyshev ({kind})")
+            )
+            continue
         coeffs = _extract_chebyshev_coeffs(block)
 
         kunits_m = re.search(r"kunits\s*=\s*['\"]([^'\"]+)['\"]", block)
@@ -206,6 +225,8 @@ def parse_pdep_reactions(text: str) -> list[ChebyshevFit]:
             )
         if pmin[1] != pmax[1]:
             raise ValueError("Chebyshev Pmin/Pmax units differ.")
+        if tmin[1] != tmax[1]:
+            raise ValueError("Chebyshev Tmin/Tmax units differ.")
 
         fits.append(
             ChebyshevFit(
@@ -213,13 +234,20 @@ def parse_pdep_reactions(text: str) -> list[ChebyshevFit]:
                 products=products,
                 coefficients=coeffs,
                 kunits=kunits,
-                tmin_k=tmin[0],
-                tmax_k=tmax[0],
+                tmin_value=tmin[0],
+                tmax_value=tmax[0],
+                temperature_units=tmin[1],
                 pmin_value=pmin[0],
                 pmax_value=pmax[0],
                 pressure_units=pmin[1],
             )
         )
+    return fits, skips
+
+
+def parse_pdep_reactions(text: str) -> list[ChebyshevFit]:
+    """Parse every *active* ``pdepreaction(...)`` Chebyshev block."""
+    fits, _skips = parse_pdep_reactions_with_skips(text)
     return fits
 
 
@@ -283,6 +311,7 @@ class ArkaneInput:
     species: dict[str, InputSpecies]
     transition_states: dict[str, InputTransitionState]
     reactions: list[InputReaction]
+    network_label: str | None
     isomers: list[str]
     reactant_channels: list[list[str]]
     bath_gas: dict[str, float]
@@ -384,9 +413,11 @@ def parse_input_file(text: str) -> ArkaneInput:
     isomers: list[str] = []
     reactant_channels: list[list[str]] = []
     bath_gas: dict[str, float] = {}
+    network_label: str | None = None
     net_blocks = list(_iter_call_blocks(text, "network"))
     if net_blocks:
         nb = net_blocks[0]
+        network_label = _first(r"label\s*=\s*['\"]([^'\"]+)['\"]", nb)
         iso_m = re.search(r"isomers\s*=\s*(\[.*?\])", nb, re.DOTALL)
         if iso_m:
             isomers = [str(x) for x in ast.literal_eval(iso_m.group(1))]
@@ -465,6 +496,7 @@ def parse_input_file(text: str) -> ArkaneInput:
         species=species,
         transition_states=transition_states,
         reactions=reactions,
+        network_label=network_label,
         isomers=isomers,
         reactant_channels=reactant_channels,
         bath_gas=bath_gas,
@@ -547,7 +579,15 @@ def resolve_log_path(embedded_path: str, run_dir: Path) -> Path:
     marker = "/Data/"
     idx = embedded_path.rfind(marker)
     tail = embedded_path[idx + len(marker):] if idx != -1 else Path(embedded_path).name
-    return run_dir / "Data" / tail
+    data_root = (run_dir / "Data").resolve()
+    resolved = (data_root / tail).resolve()
+    # Containment guard: a crafted ``..`` tail must not escape <run_dir>/Data.
+    if data_root not in resolved.parents and resolved != data_root:
+        raise ValueError(
+            f"Resolved Log() path {resolved} escapes the run Data directory "
+            f"{data_root}; refusing to read."
+        )
+    return resolved
 
 
 # ---------------------------------------------------------------------------

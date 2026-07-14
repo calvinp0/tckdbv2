@@ -46,14 +46,24 @@ def main(argv: list[str] | None = None) -> int:
     print(f"TS full ab-initio ({len(gap.ts_built)}): {gap.ts_built}", file=sys.stderr)
     if gap.ts_stub_no_geometry:
         print(f"TS stubs (no geometry -> micro_reaction only): {gap.ts_stub_no_geometry}", file=sys.stderr)
+    print(f"species with statmech ({len(gap.species_with_statmech)}): {gap.species_with_statmech}", file=sys.stderr)
+    print(f"torsions emitted for: {gap.torsions_emitted}", file=sys.stderr)
     print(f"micro_reactions: {gap.micro_reactions}", file=sys.stderr)
     print(f"channels built: {gap.channels_built}", file=sys.stderr)
     if gap.channels_unmapped:
         print(f"channels unmapped: {gap.channels_unmapped}", file=sys.stderr)
+    if gap.channels_duplicate:
+        print(f"channels duplicate (skipped): {gap.channels_duplicate}", file=sys.stderr)
+    if gap.pdep_non_chebyshev:
+        print(f"pdepreaction non-Chebyshev (skipped): {gap.pdep_non_chebyshev}", file=sys.stderr)
     print(f"states: {len(payload['states'])}", file=sys.stderr)
     print(f"channel_kinetics: {len(payload['solve']['channel_kinetics'])}", file=sys.stderr)
     if gap.unstorable_fields:
         print(f"UNSTORABLE (schema gap): {gap.unstorable_fields}", file=sys.stderr)
+    else:
+        print("UNSTORABLE (schema gap): none", file=sys.stderr)
+    if gap.followups:
+        print(f"FOLLOW-UPS: {gap.followups}", file=sys.stderr)
 
     validated_ok = None
     if not args.no_validate:
