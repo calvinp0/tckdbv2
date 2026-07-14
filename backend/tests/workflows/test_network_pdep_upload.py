@@ -915,14 +915,24 @@ def test_pdep_workflow_persists_and_reads_back_channel_kinetics(db_engine) -> No
 
 
 def test_pdep_channel_kinetics_rejects_undefined_channel() -> None:
-    """A ``channel_kinetics`` entry referencing a non-existent channel is
-    rejected at schema-validation time."""
+    """A ``channel_kinetics`` entry referencing a distinct state pair with no
+    matching ``channels`` entry is rejected by the parent's channel-reference
+    integrity validator (not the source!=sink guard)."""
     payload = _full_payload(include_solve=True)
+    # Drop the reverse (dissociation) channel so (well_RO2 -> entrance) is a
+    # valid distinct-state pair that is NOT a declared channel. The remaining
+    # association channel still keeps the two states connected.
+    payload["channels"] = [
+        {
+            "source_state_key": "entrance",
+            "sink_state_key": "well_RO2",
+            "kind": "association",
+        }
+    ]
     payload["solve"]["channel_kinetics"] = [
         {
             "source_state_key": "well_RO2",
-            # No (well_RO2 -> well_RO2) channel exists.
-            "sink_state_key": "well_RO2",
+            "sink_state_key": "entrance",
             "model_kind": "chebyshev",
             "chebyshev": {
                 "n_temperature": 2,
@@ -931,7 +941,46 @@ def test_pdep_channel_kinetics_rejects_undefined_channel() -> None:
             },
         }
     ]
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="references undefined channel"):
+        NetworkPDepUploadRequest(**payload)
+
+
+def test_pdep_channel_kinetics_rejects_duplicate_within_payload() -> None:
+    """Two channel_kinetics entries for the same (source, sink) pair within one
+    payload are rejected (would silently write two rows for one channel/solve)."""
+    payload = _full_payload(include_solve=True)
+    entry = {
+        "source_state_key": "entrance",
+        "sink_state_key": "well_RO2",
+        "model_kind": "chebyshev",
+        "chebyshev": {
+            "n_temperature": 2,
+            "n_pressure": 2,
+            "coefficients": [[1.0, 2.0], [3.0, 4.0]],
+        },
+    }
+    payload["solve"]["channel_kinetics"] = [entry, {**entry}]
+    with pytest.raises(ValueError, match="unique"):
+        NetworkPDepUploadRequest(**payload)
+
+
+def test_pdep_channel_kinetics_rejects_non_finite_coefficient() -> None:
+    """A NaN Chebyshev coefficient is rejected at the schema layer (not a
+    500 at JSONB insert time)."""
+    payload = _full_payload(include_solve=True)
+    payload["solve"]["channel_kinetics"] = [
+        {
+            "source_state_key": "entrance",
+            "sink_state_key": "well_RO2",
+            "model_kind": "chebyshev",
+            "chebyshev": {
+                "n_temperature": 2,
+                "n_pressure": 2,
+                "coefficients": [[1.0, float("nan")], [3.0, 4.0]],
+            },
+        }
+    ]
+    with pytest.raises(ValueError, match="finite"):
         NetworkPDepUploadRequest(**payload)
 
 

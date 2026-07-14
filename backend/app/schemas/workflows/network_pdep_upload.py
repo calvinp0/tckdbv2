@@ -21,6 +21,7 @@ are rejected when channels are explicitly provided.
 See DR-0001 for design rationale.
 """
 
+import math
 from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
@@ -411,6 +412,12 @@ class ChebyshevKineticsIn(SchemaBase):
                     f"Chebyshev coefficients row {i} must have n_pressure="
                     f"{self.n_pressure} columns, got {len(row)}."
                 )
+            for j, value in enumerate(row):
+                if not math.isfinite(value):
+                    raise ValueError(
+                        f"Chebyshev coefficient at ({i}, {j}) must be finite, "
+                        f"got {value!r}."
+                    )
         return self
 
 
@@ -795,6 +802,30 @@ class NetworkPDepUploadRequest(SchemaBase):
         ]
         if len(set(pairs)) != len(pairs):
             raise ValueError("Channels must be unique by (source_state_key, sink_state_key).")
+        return self
+
+    @model_validator(mode="after")
+    def validate_unique_channel_kinetics(self) -> Self:
+        """Ensure no duplicate channel_kinetics within one payload.
+
+        Two entries sharing the same ``(source_state_key, sink_state_key)``
+        would silently write two ``NetworkKinetics`` rows for one
+        (channel, solve) pair — user error within a single upload. Multiple
+        rows per (channel, solve) across separate uploads remain legitimate
+        under append-only semantics; only the within-payload duplicate is
+        rejected here.
+        """
+        if self.solve is None:
+            return self
+        pairs = [
+            (nk.source_state_key, nk.sink_state_key)
+            for nk in self.solve.channel_kinetics
+        ]
+        if len(set(pairs)) != len(pairs):
+            raise ValueError(
+                "channel_kinetics entries must be unique by "
+                "(source_state_key, sink_state_key) within one payload."
+            )
         return self
 
     @model_validator(mode="after")
