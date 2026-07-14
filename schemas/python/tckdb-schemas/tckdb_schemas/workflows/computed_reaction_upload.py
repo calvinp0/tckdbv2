@@ -43,7 +43,6 @@ from tckdb_schemas.fragments.geometry import GeometryPayload
 from tckdb_schemas.fragments.identity import SpeciesEntryIdentityPayload
 from tckdb_schemas.fragments.refs import (
     FreqScaleFactorRef,
-    LevelOfTheoryRef,
     SoftwareReleaseRef,
     WorkflowToolReleaseRef,
 )
