@@ -100,18 +100,22 @@ class AppliedGroupAdditivity(Base, TimestampMixin, CreatedByMixin):
 
     Mirrors ``applied_energy_correction``: the applied row holds the FK to
     its target (here the ``thermo`` result) rather than the target holding a
-    FK back. ``thermo_id`` is nullable (additive, per the migration rules)
-    and ``UNIQUE`` — an estimated thermo record has at most one GA breakdown.
+    FK back. ``thermo_id`` is ``NOT NULL`` and ``UNIQUE`` — an applied-GA row
+    is always created attached to a persisted thermo record (the workflow has
+    the thermo id in hand before creating it), and an estimated thermo record
+    has at most one GA breakdown. This is a brand-new, not-yet-deployed table,
+    so the ``NOT NULL`` tightening is legal in-revision per the migration
+    rules; the additive/nullable rule governs FKs added to *deployed* tables.
     """
 
     __tablename__ = "applied_group_additivity"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
-    thermo_id: Mapped[Optional[int]] = mapped_column(
+    thermo_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("thermo.id", deferrable=True, initially="IMMEDIATE"),
-        nullable=True,
+        nullable=False,
         unique=True,
     )
     scheme_id: Mapped[int] = mapped_column(
@@ -124,7 +128,7 @@ class AppliedGroupAdditivity(Base, TimestampMixin, CreatedByMixin):
 
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    thermo: Mapped[Optional["Thermo"]] = relationship(
+    thermo: Mapped["Thermo"] = relationship(
         back_populates="applied_group_additivity",
     )
     scheme: Mapped["GroupAdditivityScheme"] = relationship(back_populates="applied")

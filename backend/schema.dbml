@@ -646,7 +646,7 @@ Table applied_energy_correction_component {
 
 Table applied_group_additivity {
   id bigint [pk, not null]
-  thermo_id bigint [ref: > thermo.id]
+  thermo_id bigint [not null, ref: > thermo.id]
   scheme_id bigint [not null, ref: > group_additivity_scheme.id]
   note text
   created_at timestamp [not null, default: 'now']

@@ -19,7 +19,13 @@ from app.db.models.group_additivity import (
     GroupAdditivityScheme,
 )
 from app.schemas.reads.scientific_thermo import ThermoReadRequest
+from app.schemas.workflows.group_additivity_upload import (
+    AppliedGroupAdditivityUploadPayload,
+)
 from app.schemas.workflows.thermo_upload import ThermoUploadRequest
+from app.services.group_additivity_resolution import (
+    create_applied_group_additivity,
+)
 from app.services.scientific_read.thermo import get_species_thermo
 from app.workflows.thermo import persist_thermo_upload
 
@@ -165,6 +171,31 @@ def test_ga_rejected_on_non_estimated_origin():
             scientific_origin="computed",
             h298_kj_mol=-84.0,
             group_additivity=_ga_payload(),
+        )
+
+
+def test_service_guard_rejects_ga_on_non_estimated_thermo(db_session):
+    """create_applied_group_additivity refuses a non-estimated thermo target.
+
+    This guards programmatic (non-upload) callers that bypass the Pydantic
+    upload-schema validator: a computed thermo must not receive a GA
+    breakdown.
+    """
+    computed = persist_thermo_upload(
+        db_session,
+        ThermoUploadRequest(
+            species_entry={"smiles": "N", "charge": 0, "multiplicity": 1},
+            scientific_origin="computed",
+            h298_kj_mol=-45.9,
+            s298_j_mol_k=192.8,
+        ),
+    )
+    db_session.flush()
+
+    payload = AppliedGroupAdditivityUploadPayload.model_validate(_ga_payload())
+    with pytest.raises(ValueError, match="scientific_origin='estimated'"):
+        create_applied_group_additivity(
+            db_session, payload, thermo_id=computed.id
         )
 
 

@@ -7,8 +7,10 @@ design mirroring the energy-correction tables (DR-0003 / DR-0035):
   group-additivity library / estimator (reference layer). Deduped on
   ``(name, version)``; carries a ``public_ref``.
 * ``applied_group_additivity`` — one estimation, linking a scheme to the
-  ``thermo`` record it produced (application layer). ``thermo_id`` is nullable
-  (additive) and UNIQUE (one breakdown per thermo).
+  ``thermo`` record it produced (application layer). ``thermo_id`` is NOT NULL
+  and UNIQUE (one breakdown per thermo; applied-GA is always attached to a
+  persisted thermo). This is a brand-new, not-yet-deployed table, so the NOT
+  NULL is set at create time in-revision per the migration rules.
 * ``applied_group_additivity_component`` — per-Benson-group contribution to
   H298 / S298 / Cp298 (fixed-unit columns per the unit policy).
 
@@ -123,7 +125,7 @@ def upgrade() -> None:
     op.create_table(
         "applied_group_additivity",
         sa.Column("id", sa.BigInteger(), nullable=False),
-        sa.Column("thermo_id", sa.BigInteger(), nullable=True),
+        sa.Column("thermo_id", sa.BigInteger(), nullable=False),
         sa.Column("scheme_id", sa.BigInteger(), nullable=False),
         sa.Column("note", sa.Text(), nullable=True),
         sa.Column(

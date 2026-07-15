@@ -10,11 +10,13 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db.models.common import ScientificOriginKind
 from app.db.models.group_additivity import (
     AppliedGroupAdditivity,
     AppliedGroupAdditivityComponent,
     GroupAdditivityScheme,
 )
+from app.db.models.thermo import Thermo
 from app.schemas.workflows.group_additivity_upload import (
     AppliedGroupAdditivityUploadPayload,
     GroupAdditivitySchemeRef,
@@ -33,6 +35,15 @@ def resolve_or_create_ga_scheme(
     Dedup key: ``(name, version)``. Descriptive fields (``description``,
     ``code_commit``, ``note``) and the literature link are only used when a
     new scheme is created; on a hit the existing row is reused unchanged.
+
+    .. warning::
+       ``code_commit`` is **not** part of the dedup key. If a later upload
+       reuses the same ``(name, version)`` with a *different* ``code_commit``,
+       the existing scheme row (with its original commit) is reused and the
+       new commit is silently ignored — so the stored commit could otherwise
+       misrepresent the later estimate. Contributors who change the estimator
+       code / group-database state **must** encode that change in ``version``
+       (the dedup key) so distinct code states resolve to distinct schemes.
 
     :param session: Active SQLAlchemy session.
     :param ref: Upload-facing scheme reference.
@@ -88,7 +99,24 @@ def create_applied_group_additivity(
         constraint on ``thermo_id``.
     :param created_by: Optional application user id.
     :returns: Newly created ``AppliedGroupAdditivity`` row.
+    :raises ValueError: if ``thermo_id`` does not reference a thermo record
+        whose ``scientific_origin`` is ``estimated``. The upload schema
+        already enforces this, but the guard also protects future
+        programmatic (non-upload) callers. The message names the field, not
+        the row id (no DB id leakage).
     """
+    thermo = session.get(Thermo, thermo_id)
+    if thermo is None:
+        raise ValueError(
+            "create_applied_group_additivity: thermo_id does not reference an "
+            "existing thermo record."
+        )
+    if thermo.scientific_origin != ScientificOriginKind.estimated:
+        raise ValueError(
+            "A group-additivity breakdown may only be attached to a thermo "
+            "record with scientific_origin='estimated'."
+        )
+
     scheme = resolve_or_create_ga_scheme(
         session, payload.scheme, created_by=created_by
     )
