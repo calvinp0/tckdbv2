@@ -19,6 +19,8 @@ so the coordinates faithfully encode the intended stereochemistry.
 
 from __future__ import annotations
 
+import random
+
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -31,6 +33,21 @@ def _xyz_from_smiles(smiles: str, *, seed: int = 0xC0FFEE) -> str:
     assert AllChem.EmbedMolecule(mol, randomSeed=seed) == 0, smiles
     AllChem.MMFFOptimizeMolecule(mol)
     return Chem.MolToXYZBlock(mol)
+
+
+def _permute_xyz_atoms(xyz_block: str, *, seed: int) -> str:
+    """Return the same geometry with its coordinate lines shuffled.
+
+    Header (atom count + comment) is preserved; only the atom rows are
+    reordered. This is a stronger determinism probe than re-embedding: the
+    physical configuration is byte-for-byte identical, only the atom *order*
+    differs.
+    """
+    lines = xyz_block.strip().splitlines()
+    header, coords = lines[:2], lines[2:]
+    rng = random.Random(seed)
+    rng.shuffle(coords)
+    return "\n".join(header + coords)
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +71,28 @@ class TestEZDoubleBonds:
     def test_trans_2_butene_is_E(self) -> None:
         xyz = _xyz_from_smiles(r"C/C=C/C")
         assert derive_stereo_label_from_3d("CC=CC", xyz) == "E"
+
+    def test_hand_written_trans_2_butene_is_E(self) -> None:
+        # Independent, hand-placed planar geometry (not RDKit-embedded from a
+        # stereo-SMILES) to break the circularity of the ETKDG-based fixtures.
+        # C1=C2 double bond along x; the two methyl carbons sit on opposite
+        # sides of the double bond (trans) -> E.
+        hand_trans_2_butene = """12
+
+C   -1.90   0.55   0.00
+C   -0.60   0.55   0.00
+C    0.60  -0.55   0.00
+C    1.90  -0.55   0.00
+H   -0.10   1.50   0.00
+H    0.10  -1.50   0.00
+H   -2.30   1.56   0.00
+H   -2.60  -0.10   0.52
+H   -1.85   0.20  -1.03
+H    2.30  -1.56   0.00
+H    2.60   0.10  -0.52
+H    1.85  -0.20   1.03
+"""
+        assert derive_stereo_label_from_3d("CC=CC", hand_trans_2_butene) == "E"
 
 
 # ---------------------------------------------------------------------------
@@ -103,17 +142,61 @@ class TestNoStereoReturnsNone:
 
 
 class TestDeterministicOrdering:
-    def test_two_stereocentres_order_independent(self) -> None:
-        # Same molecule (a 2-stereocentre threonine-like backbone) written with
-        # its atoms in two different orders. Without canonical-rank ordering the
-        # emitted labels flip ("R,S" vs "S,R") and the species spuriously
-        # splits into two entries. They must be identical.
-        smi_a = "N[C@@H](O)[C@H](O)C"
-        smi_b = "C[C@@H](O)[C@H](O)N"
-        label_a = derive_stereo_label_from_3d(smi_a, _xyz_from_smiles(smi_a))
-        label_b = derive_stereo_label_from_3d(smi_b, _xyz_from_smiles(smi_b))
-        assert label_a is not None and "," in label_a
-        assert label_a == label_b
+    def test_permuted_atom_order_same_geometry_same_label(self) -> None:
+        # Strongest determinism probe: ONE fixed geometry of a genuine
+        # 2-stereocentre molecule (3-bromobutan-2-... backbone, mixed R/S so the
+        # emit order actually matters), with its XYZ atom rows repeatedly
+        # shuffled. Without canonical-rank ordering the label would flip between
+        # "S,R" and "R,S" and the species would spuriously split into two
+        # entries. Every permutation must yield an identical string.
+        base = _xyz_from_smiles("C[C@H](Br)[C@H](Br)C")
+        base_label = derive_stereo_label_from_3d("CC(Br)C(Br)C", base)
+        assert base_label is not None and "," in base_label
+        for seed in range(6):
+            permuted = _permute_xyz_atoms(base, seed=seed)
+            assert derive_stereo_label_from_3d("CC(Br)C(Br)C", permuted) == base_label
+
+    def test_meso_dibromobutane_stable_under_permutation(self) -> None:
+        # meso-2,3-dibromobutane: a hard 2-stereocentre case. One geometry,
+        # permuted atom order, must give a single stable label string.
+        base = _xyz_from_smiles("C[C@H](Br)[C@@H](Br)C")
+        base_label = derive_stereo_label_from_3d("CC(Br)C(Br)C", base)
+        assert base_label is not None and "," in base_label
+        labels = {
+            derive_stereo_label_from_3d(
+                "CC(Br)C(Br)C", _permute_xyz_atoms(base, seed=seed)
+            )
+            for seed in range(6)
+        }
+        assert labels == {base_label}
+
+
+# ---------------------------------------------------------------------------
+# KNOWN LIMITATION (documenting, not endorsing): open-shell / radical species
+# ---------------------------------------------------------------------------
+
+
+class TestRadicalLimitation:
+    """These assert the CURRENT (limited) behaviour, not the desired end state.
+
+    ``AssignBondOrdersFromTemplate`` raises ``ValueError`` on a template that
+    carries radical electrons, so open-shell species fall into the expected
+    ``except (ValueError, RuntimeError)`` branch and return ``None``. That is
+    safe (never a *wrong* label) but means stereoisomeric radicals are not yet
+    distinguished. When the tracked follow-up adds radical stereo labelling,
+    these tests are expected to FLIP intentionally (None -> "E"/"R"/...).
+    """
+
+    def test_ez_radical_currently_returns_none(self) -> None:
+        # E-crotyl radical: a genuine stereogenic double bond on an open-shell
+        # species. Would be "E" if radicals were supported; currently None.
+        xyz = _xyz_from_smiles(r"C/C=C/[CH2]")
+        assert derive_stereo_label_from_3d("CC=C[CH2]", xyz) is None
+
+    def test_chiral_radical_currently_returns_none(self) -> None:
+        # A radical bearing a tetrahedral stereocentre. Currently None.
+        xyz = _xyz_from_smiles("[C@H](F)(Cl)[CH2]")
+        assert derive_stereo_label_from_3d("[CH](F)(Cl)[CH2]", xyz) is None
 
 
 # ---------------------------------------------------------------------------

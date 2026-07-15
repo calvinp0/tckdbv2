@@ -148,6 +148,14 @@ def derive_stereo_label_from_3d(smiles: str, xyz_text: str) -> str | None:
     atom order), so the same configuration produces an identical label string
     regardless of how the SMILES/XYZ atoms happened to be ordered.
 
+    Known limitation (open-shell / radicals): configurational stereo is only
+    labelled for closed-shell species (neutral or charged). Open-shell/radical
+    species currently return ``None`` — ``AssignBondOrdersFromTemplate`` raises
+    ``ValueError`` on a template carrying radical electrons, which the expected
+    branch below turns into ``None``. This is safe (never a *wrong* label) but
+    means stereoisomeric radicals are not yet distinguished; fixing radical
+    stereo labelling is tracked as a follow-up.
+
     :param smiles: SMILES string for bond-order template.
     :param xyz_text: XYZ coordinate text (with or without header lines).
     :returns: Stereo label string (e.g. ``"R"``, ``"S"``, ``"E"``, ``"R,E"``),
