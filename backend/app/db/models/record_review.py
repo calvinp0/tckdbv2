@@ -95,7 +95,9 @@ class RecordReview(Base, TimestampMixin, CreatedByMixin):
     events: Mapped[list["RecordReviewEvent"]] = relationship(
         back_populates="record_review",
         order_by="RecordReviewEvent.id",
-        cascade="all, delete-orphan",
+        # Append-only history: no delete-orphan. Mirrors SubmissionAuditEvent,
+        # which deliberately keeps the ORM from ever deleting audit rows.
+        cascade="save-update, merge",
     )
 
     __table_args__ = (

@@ -439,3 +439,69 @@ class TestReviewEventHistory:
             )
             == []
         )
+
+    def test_terminal_selfloop_reassignment_emits_event(self, db_session):
+        # A same-status terminal transition that reassigns the reviewer
+        # (curator B re-approving a record approved by curator A) must be
+        # recorded — reviewed_by changes with no status change, and that is
+        # exactly the who/when this history exists to capture. A true no-op
+        # (same actor, nothing changed) must NOT add an event.
+        creator = _user(db_session, "sl-creator", AppUserRole.user)
+        curator_a = _user(db_session, "sl-curator-a", AppUserRole.curator)
+        curator_b = _user(db_session, "sl-curator-b", AppUserRole.curator)
+        ensure_record_review(
+            db_session,
+            record_type=SubmissionRecordType.thermo,
+            record_id=405,
+            created_by=creator.id,
+        )
+        set_record_review_status(
+            db_session,
+            record_type=SubmissionRecordType.thermo,
+            record_id=405,
+            status=RecordReviewStatus.approved,
+            actor=curator_a,
+        )
+        # created + status_change(not_reviewed->approved) so far.
+        base = list_record_review_events(
+            db_session,
+            record_type=SubmissionRecordType.thermo,
+            record_id=405,
+        )
+        assert len(base) == 2
+
+        # Same-status re-approval by a DIFFERENT curator: reviewer reassigned.
+        row = set_record_review_status(
+            db_session,
+            record_type=SubmissionRecordType.thermo,
+            record_id=405,
+            status=RecordReviewStatus.approved,
+            actor=curator_b,
+        )
+        assert row.reviewed_by == curator_b.id
+        after_reassign = list_record_review_events(
+            db_session,
+            record_type=SubmissionRecordType.thermo,
+            record_id=405,
+        )
+        assert len(after_reassign) == 3
+        last = after_reassign[-1]
+        assert last.event_kind is RecordReviewEventKind.status_change
+        assert last.from_status is RecordReviewStatus.approved
+        assert last.to_status is RecordReviewStatus.approved
+        assert last.actor_user_id == curator_b.id
+
+        # True no-op: same actor re-approves, reviewed_by unchanged -> no event.
+        set_record_review_status(
+            db_session,
+            record_type=SubmissionRecordType.thermo,
+            record_id=405,
+            status=RecordReviewStatus.approved,
+            actor=curator_b,
+        )
+        after_noop = list_record_review_events(
+            db_session,
+            record_type=SubmissionRecordType.thermo,
+            record_id=405,
+        )
+        assert len(after_noop) == 3

@@ -300,6 +300,7 @@ def ensure_record_review(
         from_status=None,
         to_status=status,
         actor_user_id=created_by,
+        reason=note,
     )
     return review
 
@@ -355,6 +356,7 @@ def set_record_review_status(
         )
 
     previous_status = existing.status
+    previous_reviewed_by = existing.reviewed_by
 
     _check_transition_allowed(
         from_status=existing.status,
@@ -384,7 +386,14 @@ def set_record_review_status(
 
     session.flush()
 
-    if previous_status != status:
+    # Emit on a real status change, and also on a same-status terminal
+    # re-stamp that reassigns the reviewer (e.g. curator B re-approving a
+    # record approved by curator A): reviewed_by changed with no status
+    # change, and that reassignment is exactly the who/when this history
+    # exists to capture. A true idempotent no-op (nothing changed) emits
+    # nothing.
+    reviewer_reassigned = existing.reviewed_by != previous_reviewed_by
+    if previous_status != status or reviewer_reassigned:
         _emit_review_event(
             session,
             review=existing,
