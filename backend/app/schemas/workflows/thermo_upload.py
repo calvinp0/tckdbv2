@@ -9,7 +9,11 @@ from typing import Self
 
 from pydantic import Field, model_validator
 
-from app.db.models.common import ScientificOriginKind, ThermoCalculationRole
+from app.db.models.common import (
+    PhaseKind,
+    ScientificOriginKind,
+    ThermoCalculationRole,
+)
 from app.schemas.common import SchemaBase
 from app.schemas.entities.thermo import ThermoNASACreate, ThermoPointCreate
 from app.schemas.fragments.calculation import CalculationWithResultsPayload
@@ -104,11 +108,34 @@ class ThermoUploadRequest(SchemaBase):
     software_release: SoftwareReleaseRef | None = None
     workflow_tool_release: WorkflowToolReleaseRef | None = None
 
+    # Statmech linkage for computed thermo. This is an *advanced /
+    # programmatic* mechanism (mirroring ``existing_calculation_id`` on
+    # source-calculation entries, DR-0028): a client that has just
+    # uploaded a statmech record threads its returned id through here so
+    # the derived thermo cites its statmech basis. Contributor-facing
+    # bundle uploads that resolve statmech server-side by local key are a
+    # future enrichment; there is no raw contributor FK for statmech here.
+    existing_statmech_id: int | None = Field(default=None, gt=0)
+
     h298_kj_mol: float | None = None
     s298_j_mol_k: float | None = None
 
     h298_uncertainty_kj_mol: float | None = Field(default=None, ge=0)
     s298_uncertainty_j_mol_k: float | None = Field(default=None, ge=0)
+
+    enthalpy_formation_0k_kj_mol: float | None = None
+    enthalpy_formation_0k_uncertainty_kj_mol: float | None = Field(
+        default=None, ge=0
+    )
+
+    # Standard-state reference pressure (bar). Defaults to the IUPAC
+    # standard of 1 bar when omitted; override with 1.01325 for legacy
+    # data referenced to 1 atm. Set explicitly to ``None`` to record an
+    # unspecified reference pressure.
+    reference_pressure_bar: float | None = Field(default=1.0, gt=0)
+    # Physical phase. Defaults to gas for computed species; override for
+    # condensed-phase or solvated records.
+    phase: PhaseKind | None = PhaseKind.gas
 
     tmin_k: float | None = Field(default=None, gt=0)
     tmax_k: float | None = Field(default=None, gt=0)

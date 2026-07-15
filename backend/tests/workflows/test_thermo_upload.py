@@ -33,12 +33,14 @@ from app.db.models.common import (
     EnergyCorrectionApplicationRole,
     EnergyUnit,
     FrequencyScaleKind,
+    PhaseKind,
     ScientificOriginKind,
     ThermoCalculationRole,
 )
 from app.db.models.energy_correction import AppliedEnergyCorrection
 from app.db.models.literature import Literature
 from app.db.models.software import SoftwareRelease
+from app.db.models.statmech import Statmech
 from app.db.models.thermo import (
     Thermo,
     ThermoNASA,
@@ -48,6 +50,7 @@ from app.db.models.thermo import (
 from app.db.models.workflow import WorkflowToolRelease
 from app.schemas.entities.thermo import (
     ThermoCreate,
+    ThermoRead,
     ThermoSourceCalculationCreate,
 )
 from app.schemas.fragments.identity import SpeciesEntryIdentityPayload
@@ -1417,3 +1420,174 @@ def test_schema_allows_role_composite_with_any_calc_type(db_engine) -> None:
         assert len(links) == 1
         assert links[0].role == ThermoCalculationRole.composite
         assert links[0].calculation_id == calc.id
+
+
+# ---------------------------------------------------------------------------
+# Reference-state semantics (2026-07-15): reference pressure, phase,
+# ΔfH°(0 K), and statmech linkage.
+# ---------------------------------------------------------------------------
+
+
+def _make_statmech(
+    session: Session, *, species_entry_id: int
+) -> Statmech:
+    """Insert a minimal statmech row tied to a species entry."""
+    statmech = Statmech(
+        species_entry_id=species_entry_id,
+        scientific_origin=ScientificOriginKind.computed,
+    )
+    session.add(statmech)
+    session.flush()
+    return statmech
+
+
+def test_thermo_upload_persists_reference_state_fields(db_engine) -> None:
+    """Reference pressure, phase, and ΔfH°(0 K) persist and read back."""
+    distinct = {"smiles": "CCCCCC", "charge": 0, "multiplicity": 1}
+    with Session(db_engine) as session, session.begin():
+        thermo = persist_thermo_upload(
+            session,
+            _thermo_request(
+                species_entry=dict(distinct),
+                reference_pressure_bar=1.01325,  # legacy 1 atm reference
+                phase=PhaseKind.gas.value,
+                enthalpy_formation_0k_kj_mol=-224.3,
+                enthalpy_formation_0k_uncertainty_kj_mol=0.4,
+            ),
+        )
+
+        assert thermo.reference_pressure_bar == pytest.approx(1.01325)
+        assert thermo.phase == PhaseKind.gas
+        assert thermo.enthalpy_formation_0k_kj_mol == pytest.approx(-224.3)
+        assert thermo.enthalpy_formation_0k_uncertainty_kj_mol == pytest.approx(0.4)
+
+        # The read schema surfaces the new fields.
+        read = ThermoRead.model_validate(thermo)
+        assert read.reference_pressure_bar == pytest.approx(1.01325)
+        assert read.phase == PhaseKind.gas
+        assert read.enthalpy_formation_0k_kj_mol == pytest.approx(-224.3)
+        assert read.enthalpy_formation_0k_uncertainty_kj_mol == pytest.approx(0.4)
+
+
+def test_thermo_upload_defaults_reference_pressure_and_phase(db_engine) -> None:
+    """Omitting reference pressure / phase applies the IUPAC 1 bar, gas defaults."""
+    distinct = {"smiles": "CCCCCCC", "charge": 0, "multiplicity": 1}
+    request = ThermoUploadRequest(
+        species_entry=dict(distinct),
+        scientific_origin="computed",
+        h298_kj_mol=-187.8,
+    )
+    assert request.reference_pressure_bar == pytest.approx(1.0)
+    assert request.phase == PhaseKind.gas
+
+    with Session(db_engine) as session, session.begin():
+        thermo = persist_thermo_upload(session, request)
+        assert thermo.reference_pressure_bar == pytest.approx(1.0)
+        assert thermo.phase == PhaseKind.gas
+        # ΔfH°(0 K) is unspecified when not provided.
+        assert thermo.enthalpy_formation_0k_kj_mol is None
+
+
+def test_thermo_upload_allows_condensed_phase_override(db_engine) -> None:
+    """A liquid-phase record overrides the gas default."""
+    distinct = {"smiles": "CCCCCCCC", "charge": 0, "multiplicity": 1}
+    with Session(db_engine) as session, session.begin():
+        thermo = persist_thermo_upload(
+            session,
+            _thermo_request(
+                species_entry=dict(distinct),
+                phase=PhaseKind.liquid.value,
+            ),
+        )
+        assert thermo.phase == PhaseKind.liquid
+
+
+def test_thermo_upload_links_existing_statmech(db_engine) -> None:
+    """A computed thermo cites its statmech basis via existing_statmech_id."""
+    distinct = {"smiles": "CCCCCCCCC", "charge": 0, "multiplicity": 1}
+    with Session(db_engine) as session, session.begin():
+        species_entry = resolve_species_entry(
+            session, SpeciesEntryIdentityPayload(**distinct),
+        )
+        statmech = _make_statmech(session, species_entry_id=species_entry.id)
+
+        thermo = persist_thermo_upload(
+            session,
+            ThermoUploadRequest(
+                species_entry=dict(distinct),
+                scientific_origin="computed",
+                h298_kj_mol=-155.0,
+                existing_statmech_id=statmech.id,
+            ),
+        )
+
+        assert thermo.statmech_id == statmech.id
+        # Relationship resolves to the same statmech record.
+        assert thermo.statmech is not None
+        assert thermo.statmech.id == statmech.id
+        # Back-ref is populated.
+        assert thermo.id in {t.id for t in statmech.thermo_records}
+
+
+def test_thermo_upload_statmech_not_found_raises_not_found(db_engine) -> None:
+    """A missing existing_statmech_id surfaces as 404 (NotFoundError)."""
+    from app.api.errors import NotFoundError
+
+    distinct = {"smiles": "CCCCCCCCCC", "charge": 0, "multiplicity": 1}
+    with pytest.raises(NotFoundError, match="does not exist"):
+        with Session(db_engine) as session, session.begin():
+            persist_thermo_upload(
+                session,
+                ThermoUploadRequest(
+                    species_entry=dict(distinct),
+                    scientific_origin="computed",
+                    h298_kj_mol=-155.0,
+                    existing_statmech_id=999_999_999,
+                ),
+            )
+
+
+def test_thermo_upload_statmech_wrong_species_entry_raises_422(db_engine) -> None:
+    """A statmech owned by a different species entry is rejected (422) and
+    the message must not leak internal ids."""
+    species_a = {"smiles": "[NH2]", "charge": 0, "multiplicity": 2}
+    species_b = {"smiles": "[CH3]", "charge": 0, "multiplicity": 2}
+
+    with pytest.raises(ValueError, match="different species entry") as exc_info:
+        with Session(db_engine) as session, session.begin():
+            entry_a = resolve_species_entry(
+                session, SpeciesEntryIdentityPayload(**species_a),
+            )
+            statmech_a = _make_statmech(session, species_entry_id=entry_a.id)
+            persist_thermo_upload(
+                session,
+                ThermoUploadRequest(
+                    species_entry=dict(species_b),
+                    scientific_origin="computed",
+                    h298_kj_mol=146.7,
+                    existing_statmech_id=statmech_a.id,
+                ),
+            )
+    detail = str(exc_info.value)
+    assert "species_entry_id=" not in detail
+    assert "id=" not in detail
+
+
+def test_schema_rejects_negative_enthalpy_formation_0k_uncertainty() -> None:
+    """ΔfH°(0 K) uncertainty must be non-negative (Field(ge=0))."""
+    with pytest.raises(ValidationError):
+        _thermo_request(enthalpy_formation_0k_uncertainty_kj_mol=-0.1)
+
+
+def test_schema_rejects_non_positive_reference_pressure() -> None:
+    """reference_pressure_bar must be strictly positive when provided."""
+    with pytest.raises(ValidationError):
+        _thermo_request(reference_pressure_bar=0.0)
+    with pytest.raises(ValidationError):
+        _thermo_request(reference_pressure_bar=-1.0)
+
+
+def test_schema_rejects_non_positive_existing_statmech_id() -> None:
+    """existing_statmech_id must be a positive integer (gt=0)."""
+    with pytest.raises(ValidationError):
+        _thermo_request(existing_statmech_id=0)
