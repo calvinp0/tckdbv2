@@ -558,6 +558,14 @@ class NetworkKineticsIn(SchemaBase):
                 raise ValueError(
                     "chebyshev must be omitted when model_kind == 'plog'."
                 )
+            # stores_log10_k is a Chebyshev-only concept: PLOG stores a real
+            # Arrhenius A, not a log10 fit. Reject it rather than persist a
+            # semantically meaningless flag on the parent row.
+            if self.stores_log10_k is not None:
+                raise ValueError(
+                    "stores_log10_k must be omitted when model_kind == 'plog' "
+                    "(it is a Chebyshev-only concept)."
+                )
         else:
             raise ValueError(
                 "Tabulated network kinetics upload not yet supported "

@@ -1036,6 +1036,52 @@ def test_pdep_channel_kinetics_rejects_plog_with_chebyshev_block() -> None:
         NetworkPDepUploadRequest(**payload)
 
 
+def test_pdep_channel_kinetics_rejects_chebyshev_with_plog_block() -> None:
+    """``model_kind=chebyshev`` may not also carry a ``plog`` sub-block
+    (symmetric converse of the plog+chebyshev rejection)."""
+    payload = _full_payload(include_solve=True)
+    payload["solve"]["channel_kinetics"] = [
+        {
+            "source_state_key": "entrance",
+            "sink_state_key": "well_RO2",
+            "model_kind": "chebyshev",
+            "chebyshev": {
+                "n_temperature": 2,
+                "n_pressure": 2,
+                "coefficients": [[1.0, 2.0], [3.0, 4.0]],
+            },
+            "plog": {
+                "entries": [
+                    {"pressure_bar": 1.0, "a": 1.0e13, "n": 0.0, "ea_kj_mol": 50.0},
+                ]
+            },
+        }
+    ]
+    with pytest.raises(ValueError, match="plog must be omitted"):
+        NetworkPDepUploadRequest(**payload)
+
+
+def test_pdep_channel_kinetics_rejects_plog_with_stores_log10_k() -> None:
+    """``stores_log10_k`` is Chebyshev-only; setting it on a PLOG payload is a
+    clean 422 rather than a semantically meaningless flag on the parent row."""
+    payload = _full_payload(include_solve=True)
+    payload["solve"]["channel_kinetics"] = [
+        {
+            "source_state_key": "entrance",
+            "sink_state_key": "well_RO2",
+            "model_kind": "plog",
+            "plog": {
+                "entries": [
+                    {"pressure_bar": 1.0, "a": 1.0e13, "n": 0.0, "ea_kj_mol": 50.0},
+                ]
+            },
+            "stores_log10_k": True,
+        }
+    ]
+    with pytest.raises(ValueError, match="stores_log10_k must be omitted"):
+        NetworkPDepUploadRequest(**payload)
+
+
 def test_pdep_channel_kinetics_rejects_duplicate_plog_pressure_index() -> None:
     """Two PLOG entries sharing ``(pressure_bar, entry_index)`` collide on the
     child composite primary key; reject them at the schema layer as a 422."""
