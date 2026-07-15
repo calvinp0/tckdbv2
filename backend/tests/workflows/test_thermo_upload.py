@@ -1502,6 +1502,81 @@ def test_thermo_upload_allows_condensed_phase_override(db_engine) -> None:
         assert thermo.phase == PhaseKind.liquid
 
 
+@pytest.mark.parametrize("origin", ["experimental", "estimated"])
+def test_non_computed_origin_does_not_default_phase_or_pressure(
+    db_engine, origin: str,
+) -> None:
+    """Experimental/literature/estimated uploads must NOT be silently
+    stamped gas @ 1 bar. Only computed uploads get the QC defaults; other
+    origins leave phase/reference_pressure_bar unset unless provided."""
+    request = ThermoUploadRequest(
+        species_entry={"smiles": "O=C=O", "charge": 0, "multiplicity": 1},
+        scientific_origin=origin,
+        h298_kj_mol=-393.5,
+        s298_j_mol_k=213.8,
+    )
+    # Schema-level: defaults are not applied for non-computed origins.
+    assert request.reference_pressure_bar is None
+    assert request.phase is None
+
+    with Session(db_engine) as session, session.begin():
+        thermo = persist_thermo_upload(session, request)
+        assert thermo.reference_pressure_bar is None
+        assert thermo.phase is None
+
+
+def test_computed_origin_defaults_phase_and_pressure(db_engine) -> None:
+    """A computed upload without phase/pressure defaults to gas @ 1 bar."""
+    request = ThermoUploadRequest(
+        species_entry={"smiles": "CCCCCCCCCCC", "charge": 0, "multiplicity": 1},
+        scientific_origin="computed",
+        h298_kj_mol=-270.8,
+    )
+    assert request.reference_pressure_bar == pytest.approx(1.0)
+    assert request.phase == PhaseKind.gas
+
+    with Session(db_engine) as session, session.begin():
+        thermo = persist_thermo_upload(session, request)
+        assert thermo.reference_pressure_bar == pytest.approx(1.0)
+        assert thermo.phase == PhaseKind.gas
+
+
+def test_explicit_reference_state_honored_for_experimental_origin(
+    db_engine,
+) -> None:
+    """Explicit phase/pressure are honored regardless of origin: an
+    experimental liquid record keeps its own values, not the QC defaults."""
+    request = ThermoUploadRequest(
+        species_entry={"smiles": "OCCO", "charge": 0, "multiplicity": 1},
+        scientific_origin="experimental",
+        h298_kj_mol=-460.0,
+        phase=PhaseKind.liquid.value,
+        reference_pressure_bar=1.01325,
+    )
+    assert request.phase == PhaseKind.liquid
+    assert request.reference_pressure_bar == pytest.approx(1.01325)
+
+    with Session(db_engine) as session, session.begin():
+        thermo = persist_thermo_upload(session, request)
+        assert thermo.phase == PhaseKind.liquid
+        assert thermo.reference_pressure_bar == pytest.approx(1.01325)
+
+
+def test_explicit_none_phase_honored_for_computed_origin() -> None:
+    """An explicit ``phase=None`` on a computed upload is honored (not
+    overwritten with gas): model_fields_set distinguishes omitted from
+    explicitly-provided-None."""
+    request = ThermoUploadRequest(
+        species_entry=dict(_SPECIES_ENTRY),
+        scientific_origin="computed",
+        h298_kj_mol=-241.8,
+        phase=None,
+        reference_pressure_bar=None,
+    )
+    assert request.phase is None
+    assert request.reference_pressure_bar is None
+
+
 def test_thermo_upload_links_existing_statmech(db_engine) -> None:
     """A computed thermo cites its statmech basis via existing_statmech_id."""
     distinct = {"smiles": "CCCCCCCCC", "charge": 0, "multiplicity": 1}

@@ -128,14 +128,17 @@ class ThermoUploadRequest(SchemaBase):
         default=None, ge=0
     )
 
-    # Standard-state reference pressure (bar). Defaults to the IUPAC
-    # standard of 1 bar when omitted; override with 1.01325 for legacy
-    # data referenced to 1 atm. Set explicitly to ``None`` to record an
-    # unspecified reference pressure.
-    reference_pressure_bar: float | None = Field(default=1.0, gt=0)
-    # Physical phase. Defaults to gas for computed species; override for
-    # condensed-phase or solvated records.
-    phase: PhaseKind | None = PhaseKind.gas
+    # Standard-state reference pressure (bar) and physical phase. These are
+    # left unset (``None``) at the field level and are only *defaulted* for
+    # computed uploads (see ``apply_computed_origin_defaults`` below): a QC
+    # record is reasonably gas-phase @ 1 bar (IUPAC) unless stated
+    # otherwise. For experimental/literature/estimated origins the defaults
+    # are NOT applied — silently stamping a condensed-phase literature value
+    # as ``gas @ 1 bar`` would reintroduce the ambiguity this schema removes.
+    # Explicit values are always honored regardless of origin; for legacy
+    # 1 atm data set ``reference_pressure_bar=1.01325``.
+    reference_pressure_bar: float | None = Field(default=None, gt=0)
+    phase: PhaseKind | None = None
 
     tmin_k: float | None = Field(default=None, gt=0)
     tmax_k: float | None = Field(default=None, gt=0)
@@ -160,6 +163,27 @@ class ThermoUploadRequest(SchemaBase):
     @model_validator(mode="after")
     def normalize_text_fields(self) -> Self:
         self.note = normalize_optional_text(self.note)
+        return self
+
+    @model_validator(mode="after")
+    def apply_computed_origin_defaults(self) -> Self:
+        """Fill reference-state defaults only for computed uploads.
+
+        A computed QC record is reasonably gas-phase @ 1 bar (IUPAC)
+        unless stated otherwise, so ``phase``/``reference_pressure_bar``
+        default to ``gas``/``1.0`` when the uploader omits them. For
+        experimental/literature/estimated origins the fields stay ``None``
+        unless explicitly provided — defaulting them would silently stamp
+        e.g. a condensed-phase literature value as ``gas @ 1 bar``.
+
+        Explicit values (including an explicit ``None``) are honored:
+        ``model_fields_set`` distinguishes "omitted" from "provided".
+        """
+        if self.scientific_origin == ScientificOriginKind.computed:
+            if "reference_pressure_bar" not in self.model_fields_set:
+                self.reference_pressure_bar = 1.0
+            if "phase" not in self.model_fields_set:
+                self.phase = PhaseKind.gas
         return self
 
     @model_validator(mode="after")

@@ -102,8 +102,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
+    # Plain (convention-expanded) name on both create and drop sides, per
+    # the d0f4b2c6e8a3 precedent, so the two can't drift on a future edit.
     op.drop_constraint(
-        op.f("ck_thermo_enthalpy_formation_0k_uncertainty_ge_0"),
+        "enthalpy_formation_0k_uncertainty_ge_0",
         "thermo",
         type_="check",
     )

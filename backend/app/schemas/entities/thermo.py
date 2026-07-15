@@ -198,12 +198,21 @@ class ThermoUpdate(SchemaBase):
     literature_id: int | None = None
     workflow_tool_release_id: int | None = None
     software_release_id: int | None = None
+    statmech_id: int | None = None
 
     h298_kj_mol: float | None = None
     s298_j_mol_k: float | None = None
 
     h298_uncertainty_kj_mol: float | None = Field(default=None, ge=0)
     s298_uncertainty_j_mol_k: float | None = Field(default=None, ge=0)
+
+    enthalpy_formation_0k_kj_mol: float | None = None
+    enthalpy_formation_0k_uncertainty_kj_mol: float | None = Field(
+        default=None, ge=0
+    )
+
+    reference_pressure_bar: float | None = None
+    phase: PhaseKind | None = None
 
     tmin_k: float | None = Field(default=None, gt=0)
     tmax_k: float | None = Field(default=None, gt=0)
