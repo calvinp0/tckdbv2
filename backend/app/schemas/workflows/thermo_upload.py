@@ -322,27 +322,30 @@ class ThermoUploadRequest(SchemaBase):
 
     @model_validator(mode="after")
     def validate_representation_consistency(self) -> Self:
-        """Enforce a single temperature-dependent representation block.
+        """Enforce a single temperature-dependent *fit* representation.
 
-        At most one of {nasa (NASA-7), nasa9_intervals, wilhoit, points}
-        may be populated — mixing e.g. a NASA-9 fit and a Wilhoit fit on one
-        thermo record is ambiguous. When ``model_kind`` is supplied it must
-        match the populated block (nasa7↔nasa, nasa9↔nasa9_intervals,
-        wilhoit↔wilhoit, tabulated↔points, scalar↔none-of-those). When
-        ``model_kind`` is None the backend infers it. NASA-9 interval indices
+        At most one fit form {nasa (NASA-7), nasa9_intervals, wilhoit} may be
+        populated — mixing e.g. a NASA-9 fit and a Wilhoit fit on one thermo
+        record is ambiguous. Tabulated ``points`` are NOT a fit: they may
+        accompany a fit as auxiliary evidence, or stand alone (tabulated).
+        When ``model_kind`` is supplied it must match the primary
+        representation (nasa7↔nasa, nasa9↔nasa9_intervals, wilhoit↔wilhoit,
+        tabulated↔points-only, scalar↔none). When ``model_kind`` is None the
+        backend infers it (a fit wins over points). NASA-9 interval indices
         must be unique and contiguous from 1.
         """
-        populated = {
+        fits = {
             "nasa": self.nasa is not None,
             "nasa9_intervals": bool(self.nasa9_intervals),
             "wilhoit": self.wilhoit is not None,
-            "points": bool(self.points),
         }
-        active = [name for name, present in populated.items() if present]
-        if len(active) > 1:
+        active_fits = [name for name, present in fits.items() if present]
+        if len(active_fits) > 1:
             raise ValueError(
-                "Thermo upload may populate at most one representation block; "
-                f"got multiple: {', '.join(sorted(active))}."
+                "Thermo upload may populate at most one fit representation "
+                f"(NASA-7 / NASA-9 / Wilhoit); got multiple: "
+                f"{', '.join(sorted(active_fits))}. Tabulated points may "
+                "accompany a fit, but two fits on one record are ambiguous."
             )
 
         # NASA-9 interval indices must be unique and contiguous from 1.
@@ -358,25 +361,32 @@ class ThermoUploadRequest(SchemaBase):
                     "starting from 1."
                 )
 
-        # If model_kind is supplied, it must agree with the populated block.
+        # If model_kind is supplied, it must agree with the primary
+        # representation (points may coexist with any fit).
         if self.model_kind is not None:
-            block_for_kind = {
+            fit_for_kind = {
                 ThermoModelKind.nasa7: "nasa",
                 ThermoModelKind.nasa9: "nasa9_intervals",
                 ThermoModelKind.wilhoit: "wilhoit",
-                ThermoModelKind.tabulated: "points",
             }
+            has_points = bool(self.points)
             if self.model_kind == ThermoModelKind.scalar:
-                if active:
+                if active_fits or has_points:
                     raise ValueError(
                         "model_kind='scalar' is incompatible with a populated "
-                        f"representation block ({', '.join(sorted(active))})."
+                        "representation block (fit or tabulated points)."
+                    )
+            elif self.model_kind == ThermoModelKind.tabulated:
+                if active_fits or not has_points:
+                    raise ValueError(
+                        "model_kind='tabulated' requires tabulated points and "
+                        "no fit block."
                     )
             else:
-                expected_block = block_for_kind[self.model_kind]
-                if active != [expected_block]:
+                expected_fit = fit_for_kind[self.model_kind]
+                if active_fits != [expected_fit]:
                     raise ValueError(
                         f"model_kind='{self.model_kind.value}' requires the "
-                        f"'{expected_block}' block to be the only one populated."
+                        f"'{expected_fit}' fit block to be populated."
                     )
         return self

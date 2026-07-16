@@ -217,20 +217,35 @@ def test_read_model_kind_filter_selects_nasa9(rb_session) -> None:
 
 
 def test_nasa9_and_wilhoit_together_rejected() -> None:
-    with pytest.raises(ValidationError, match="at most one representation block"):
+    with pytest.raises(ValidationError, match="at most one fit representation"):
         _request(nasa9_intervals=_nasa9_intervals(), wilhoit=_wilhoit_block())
 
 
-def test_nasa9_and_points_together_rejected() -> None:
-    with pytest.raises(ValidationError, match="at most one representation block"):
-        _request(
-            nasa9_intervals=_nasa9_intervals(),
-            points=[{"temperature_k": 300.0, "cp_j_mol_k": 30.0}],
-        )
+def test_two_fits_together_rejected() -> None:
+    """Two fitted models (NASA-9 + NASA-7) on one record are rejected."""
+    nasa7 = {
+        "t_low": 200.0, "t_mid": 1000.0, "t_high": 6000.0,
+        "a1": 1.0, "a2": 0.0, "a3": 0.0, "a4": 0.0, "a5": 0.0,
+        "a6": -1.0, "a7": 1.0,
+        "b1": 1.0, "b2": 0.0, "b3": 0.0, "b4": 0.0, "b5": 0.0,
+        "b6": -1.0, "b7": 1.0,
+    }
+    with pytest.raises(ValidationError, match="at most one fit representation"):
+        _request(nasa=nasa7, nasa9_intervals=_nasa9_intervals())
+
+
+def test_nasa9_and_points_coexist_accepted() -> None:
+    """Tabulated points may accompany a fit; the fit wins model_kind."""
+    req = _request(
+        nasa9_intervals=_nasa9_intervals(),
+        points=[{"temperature_k": 300.0, "cp_j_mol_k": 30.0}],
+    )
+    assert req.nasa9_intervals
+    assert req.points
 
 
 def test_model_kind_mismatch_rejected() -> None:
-    with pytest.raises(ValidationError, match="requires the 'wilhoit' block"):
+    with pytest.raises(ValidationError, match="requires the 'wilhoit' fit block"):
         _request(model_kind="wilhoit", nasa9_intervals=_nasa9_intervals())
 
 

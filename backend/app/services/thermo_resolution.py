@@ -30,13 +30,15 @@ def infer_thermo_model_kind(
 ) -> ThermoModelKind | None:
     """Resolve the effective thermo ``model_kind``.
 
-    An explicit ``model_kind`` always wins. Otherwise infer from the single
-    populated representation block (nasa→nasa7, nasa9→nasa9, wilhoit→wilhoit,
-    points→tabulated); when none is populated the record is ``scalar``.
+    An explicit ``model_kind`` always wins. Otherwise infer from the
+    populated representation: a fit takes precedence over tabulated points
+    (nasa→nasa7, nasa9→nasa9, wilhoit→wilhoit), then points→tabulated; when
+    nothing is populated the record is ``scalar``.
 
-    The upload schema guarantees at most one block is populated and that an
-    explicit ``model_kind`` agrees with it, so the inference here is
-    unambiguous.
+    The upload schema guarantees at most one *fit* block is populated (points
+    may accompany a fit as auxiliary evidence) and that an explicit
+    ``model_kind`` agrees with the primary representation, so the inference
+    here is unambiguous.
     """
     if model_kind is not None:
         return model_kind

@@ -341,6 +341,8 @@ def get_species_thermo(
             statmech_sources=statmech_sources,
             nasa_present=nasa_block is not None,
             points_count=len(points_by_thermo.get(t.id, [])),
+            has_nasa9=bool(nasa9_by_thermo.get(t.id)),
+            has_wilhoit=t.id in wilhoit_by_thermo,
             geom_vals=geom_vals,
             scf_vals=scf_vals,
         )
@@ -936,6 +938,8 @@ def _evidence_breakdown(
     statmech_sources: list[StatmechSourceCalculation],
     nasa_present: bool,
     points_count: int,
+    has_nasa9: bool = False,
+    has_wilhoit: bool = False,
     geom_vals: dict[int, ValidationStatus],
     scf_vals: dict[int, SCFStabilityStatus],
 ) -> EvidenceCompletenessBreakdown:
@@ -963,7 +967,9 @@ def _evidence_breakdown(
         or StatmechCalculationRole.sp in statmech_roles
         or StatmechCalculationRole.composite in statmech_roles
     )
-    has_temperature_dependent_model = nasa_present or points_count >= 2
+    has_temperature_dependent_model = (
+        nasa_present or has_nasa9 or has_wilhoit or points_count >= 2
+    )
 
     has_uncertainty = any(
         v is not None
