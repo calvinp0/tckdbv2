@@ -61,7 +61,7 @@ class TestH2OStatmech:
         )
 
     def test_rotational_constants_mapped_to_first_class_cm1(self, h2o_record):
-        payload, *_ = _build(h2o_record)
+        payload, _, _, unparsed = _build(h2o_record)
         # Asymmetric top: all three axes convert GHz→cm⁻¹.
         assert payload["rotational_constant_a_cm1"] == pytest.approx(
             835.840 / _GHZ_PER_CM1
@@ -72,8 +72,13 @@ class TestH2OStatmech:
         assert payload["rotational_constant_c_cm1"] == pytest.approx(
             278.140 / _GHZ_PER_CM1
         )
+        # Independent literal pin (not derived from _GHZ_PER_CM1): a wrong
+        # constant *value*, not just a wrong direction, must fail. 835.840
+        # GHz / 29.9792458 = 27.8807 cm⁻¹ (matches H₂O's known A₀ ≈ 27.88).
+        assert payload["rotational_constant_a_cm1"] == pytest.approx(
+            27.8807, abs=1e-3
+        )
         # Raw GHz values remain in the unparsed side-channel.
-        _, _, _, unparsed = _build(h2o_record)
         assert unparsed["statmech_rotational_constants"]["a_ghz"] == 835.840
 
 
