@@ -155,8 +155,9 @@ class ThermoUploadRequest(SchemaBase):
     note: str | None = None
 
     # Explicit representation kind. When provided it must agree with the
-    # single populated representation block (validated below); when omitted
-    # the backend infers it from which block was given.
+    # primary representation (the fit, or points-only=tabulated, or
+    # none=scalar; validated below — tabulated points may accompany a fit).
+    # When omitted the backend infers it (a fit wins over points).
     model_kind: ThermoModelKind | None = None
 
     # Nested child data
