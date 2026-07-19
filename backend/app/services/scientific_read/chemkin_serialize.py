@@ -328,6 +328,7 @@ def _reaction_equation(
     names_by_ref: dict[str, str],
     *,
     third_body: bool,
+    simple_third_body: bool = False,
 ) -> str:
     def side(refs: list[str]) -> str:
         toks = [names_by_ref.get(r, r) for r in refs]
@@ -337,7 +338,14 @@ def _reaction_equation(
     arrow = "<=>" if rr.reaction.reversible else "=>"
     lhs = side(rr.reactant_refs)
     rhs = side(rr.product_refs)
-    if third_body:
+    # Two mutually-exclusive third-body forms. A *simple* third-body reaction
+    # (generic ``+M`` collider, no falloff) carries a BARE ``+ M`` on both sides,
+    # which raises the concentration order by one. Falloff / Chebyshev (pressure
+    # dependent) carry the parenthesized ``(+M)`` form instead.
+    if simple_third_body:
+        lhs += " + M"
+        rhs += " + M"
+    elif third_body:
         lhs += " (+M)"
         rhs += " (+M)"
     return f"{lhs} {arrow} {rhs}"
@@ -349,14 +357,55 @@ def _kinetics_lines(
     names_by_ref: dict[str, str],
     collider_names: dict[int, str],
     options: ChemkinOptions,
-) -> list[str]:
+) -> list[list[str]]:
+    """Emit the CHEMKIN reaction block(s) for one kinetics record.
+
+    Returns a list of *blocks*, each block being the lines of ONE CHEMKIN
+    reaction: its main Arrhenius line plus any LOW/TROE/SRI/PLOG/CHEB/efficiency
+    auxiliary lines. Almost every kinetics form yields a single block. A
+    ``multi_arrhenius`` (sum-of-Arrhenius, i.e. a Chemkin ``DUPLICATE`` channel)
+    yields one block *per Arrhenius term* — the same equation written once per
+    term — because CHEMKIN represents ``k = Σ_i A_i T^{n_i} exp(−Ea_i/RT)`` as
+    the reaction repeated, each copy marked ``DUPLICATE``. The assembly loop
+    marks each block with ``DUPLICATE`` when its equation collides (which, for a
+    multi-term record, is always).
+    """
     k = sk.kinetics
     is_falloff = k.model_kind in _FALLOFF_KINDS
     is_chebyshev = k.model_kind is KineticsModelKind.chebyshev
-    has_third_body = bool(k.third_body_efficiencies) or is_falloff
+    is_multi_arrhenius = k.model_kind is KineticsModelKind.multi_arrhenius
+    # A *simple* third-body reaction (generic ``+M`` collider, no falloff/PDep):
+    # the ``[M]`` term raises the main-line concentration order by one, so the
+    # stored A is already at order+1 and the equation must carry a bare ``+ M``.
+    is_simple_third_body = (
+        bool(k.is_third_body) and not is_falloff and not is_chebyshev
+    )
+    has_third_body = (
+        bool(k.third_body_efficiencies) or is_falloff or bool(k.is_third_body)
+    )
     # A Chebyshev reaction is pressure-dependent and CHEMKIN requires it to be
     # written in the ``(+M)`` third-body form, exactly like falloff.
-    eq = _reaction_equation(rr, names_by_ref, third_body=is_falloff or is_chebyshev)
+    eq = _reaction_equation(
+        rr,
+        names_by_ref,
+        third_body=is_falloff or is_chebyshev,
+        simple_third_body=is_simple_third_body,
+    )
+
+    if is_multi_arrhenius:
+        # Sum-of-Arrhenius: the scalar a/n/ea are NULL by design; the terms live
+        # in ``arrhenius_entries``. Emit one Arrhenius main-line block per term
+        # (ordered by entry_index via the relationship's order_by). Each becomes
+        # its own DUPLICATE-marked CHEMKIN reaction in the assembly loop.
+        blocks: list[list[str]] = []
+        for entry in k.arrhenius_entries:
+            a = _a_to_mol_cm_s(entry.a, entry.a_units or k.a_units)
+            n = entry.n if entry.n is not None else 0.0
+            ea = _convert_ea(entry.ea_kj_mol, options.energy_units)
+            a_str = f"{a:.4E}" if a is not None else "0.0"
+            ea_str = f"{ea:.4f}" if ea is not None else "0.0"
+            blocks.append([f"{eq}   {a_str} {n:.3f} {ea_str}"])
+        return blocks
 
     if is_chebyshev:
         # k(T,P) lives entirely in the CHEB block; the main-line Arrhenius is a
@@ -434,7 +483,7 @@ def _kinetics_lines(
             + " ".join(f"{v:.6E}" for v in flat)
             + " /"
         )
-    return lines
+    return [lines]
 
 
 def _flatten_cheb(coefficients) -> list[float]:
@@ -512,14 +561,28 @@ def _build_chem_inp(
             rr.reaction.reversible,
         )
 
-    dup_counts = Counter(_dup_key(rr) for rr in emitted)
+    # Expand every record into its CHEMKIN reaction block(s) up front. A
+    # ``multi_arrhenius`` record expands to N blocks (one per Arrhenius term),
+    # all sharing the same equation, so N terms count as N toward the duplicate
+    # tally — exactly like N separate reaction records. Marking every block
+    # whose equation-key count exceeds one gives Cantera precisely the DUPLICATE
+    # markers it demands (``Kinetics::checkDuplicates`` rejects both under- and
+    # over-declaration): each of a multi-term record's own lines self-collides,
+    # and any distinct record colliding with it is marked too.
+    record_blocks: list[tuple[ReactionExportRecord, list[list[str]]]] = []
+    dup_counts: Counter = Counter()
     for rr in emitted:
         sk = rr.kinetics[0]
-        lines.extend(
-            _kinetics_lines(rr, sk, names_by_ref, collider_names, options)
-        )
-        if dup_counts[_dup_key(rr)] > 1:
-            lines.append("    DUPLICATE")
+        blocks = _kinetics_lines(rr, sk, names_by_ref, collider_names, options)
+        record_blocks.append((rr, blocks))
+        dup_counts[_dup_key(rr)] += len(blocks)
+
+    for rr, blocks in record_blocks:
+        mark = dup_counts[_dup_key(rr)] > 1
+        for block in blocks:
+            lines.extend(block)
+            if mark:
+                lines.append("    DUPLICATE")
     lines.append("END")
     return "\n".join(lines) + "\n"
 
