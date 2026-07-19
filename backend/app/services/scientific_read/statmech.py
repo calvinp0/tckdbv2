@@ -34,6 +34,7 @@ from app.db.models.software import Software, SoftwareRelease
 from app.db.models.species import ConformerGroup, Species, SpeciesEntry
 from app.db.models.statmech import (
     Statmech,
+    StatmechElectronicLevel,
     StatmechSourceCalculation,
     StatmechTorsion,
     StatmechTorsionDefinition,
@@ -53,6 +54,7 @@ from app.schemas.reads.scientific_statmech import (
     ScientificStatmechRecord,
     StatmechConformerContextItem,
     StatmechCoreBlock,
+    StatmechElectronicLevelSummary,
     StatmechEvidenceSummary,
     StatmechFrequenciesSummary,
     StatmechFrequencyScaleFactorSummary,
@@ -90,6 +92,7 @@ from app.services.trust import (
 _LEGAL_INCLUDE_TOKENS: set[str] = {
     "source_calculations",
     "torsions",
+    "electronic_levels",
     "frequencies",
     "conformers",
     "review",
@@ -108,6 +111,7 @@ _DETAIL_LEGAL_INCLUDE_TOKENS: set[str] = _LEGAL_INCLUDE_TOKENS | {"trust"}
 _TRUST_EAGER_LOADS = (
     selectinload(Statmech.species_entry),
     selectinload(Statmech.frequency_scale_factor),
+    selectinload(Statmech.electronic_levels),
     selectinload(Statmech.torsions).selectinload(StatmechTorsion.coordinates),
     selectinload(Statmech.torsions)
     .selectinload(StatmechTorsion.source_scan_calculation)
@@ -307,6 +311,10 @@ def build_statmech_record(
     if "torsions" in includes:
         torsions_block = _build_torsions(session, torsion_rows)
 
+    electronic_levels_block: list[StatmechElectronicLevelSummary] | None = None
+    if "electronic_levels" in includes:
+        electronic_levels_block = _build_electronic_levels(session, sm.id)
+
     frequencies_block: StatmechFrequenciesSummary | None = None
     if "frequencies" in includes:
         frequencies_block = _build_frequencies_summary(
@@ -341,6 +349,7 @@ def build_statmech_record(
         available_sections=available,
         source_calculations=source_block,
         torsions=torsions_block,
+        electronic_levels=electronic_levels_block,
         frequencies=frequencies_block,
         conformers=conformers_block,
         review_history=review_block,
@@ -793,6 +802,29 @@ def _build_torsions(
             )
         )
     return out
+
+
+# ---------------------------------------------------------------------------
+# Electronic-level summaries (include=electronic_levels)
+# ---------------------------------------------------------------------------
+
+
+def _build_electronic_levels(
+    session: Session, statmech_id: int
+) -> list[StatmechElectronicLevelSummary]:
+    rows = session.scalars(
+        select(StatmechElectronicLevel)
+        .where(StatmechElectronicLevel.statmech_id == statmech_id)
+        .order_by(StatmechElectronicLevel.level_index.asc())
+    ).all()
+    return [
+        StatmechElectronicLevelSummary(
+            level_index=r.level_index,
+            energy_cm1=r.energy_cm1,
+            degeneracy=r.degeneracy,
+        )
+        for r in rows
+    ]
 
 
 # ---------------------------------------------------------------------------

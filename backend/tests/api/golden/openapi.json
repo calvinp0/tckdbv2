@@ -28095,6 +28095,20 @@
             ],
             "title": "Conformers"
           },
+          "electronic_levels": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/StatmechElectronicLevelSummary"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Electronic Levels"
+          },
           "evidence_summary": {
             "$ref": "#/components/schemas/StatmechEvidenceSummary"
           },
@@ -30350,6 +30364,30 @@
           "review"
         ],
         "title": "StatmechCoreBlock",
+        "type": "object"
+      },
+      "StatmechElectronicLevelSummary": {
+        "description": "One ``statmech_electronic_level`` row for ``include=electronic_levels``.\n\nLow-lying electronic states drive the electronic partition function\n``q_elec = Σ gᵢ·exp(−εᵢ/kT)`` (DR-0033). Each row is an ordered\n``(energy, degeneracy)`` pair: the ground state is ``level_index=1`` at\n``energy_cm1=0`` with its degeneracy; excited states follow. Needed for\nopen-shell atoms/radicals with low-lying states (OH ²Π spin-orbit\nsplitting, O(³P), halogen atoms) where a bare term symbol is\ninsufficient. Rows arrive ordered by ``level_index``.",
+        "properties": {
+          "degeneracy": {
+            "title": "Degeneracy",
+            "type": "integer"
+          },
+          "energy_cm1": {
+            "title": "Energy Cm1",
+            "type": "number"
+          },
+          "level_index": {
+            "title": "Level Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level_index",
+          "energy_cm1",
+          "degeneracy"
+        ],
+        "title": "StatmechElectronicLevelSummary",
         "type": "object"
       },
       "StatmechEvidenceSummary": {
