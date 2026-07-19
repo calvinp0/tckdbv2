@@ -1059,9 +1059,6 @@ def _chebyshev_block(kinetics: Kinetics) -> ChebyshevBlock | None:
         pmin_bar=cb.pmin_bar,
         pmax_bar=cb.pmax_bar,
         coefficients=cb.coefficients,
-        # The reaction-level ORM does not record a log10 flag; kept for shape
-        # parity with the network Chebyshev read.
-        stores_log10_k=None,
     )
 
 
@@ -1091,16 +1088,22 @@ def _falloff_block(kinetics: Kinetics) -> FalloffBlock | None:
 def _third_body_blocks(
     kinetics: Kinetics, collider_refs: dict[int, str]
 ) -> list[ThirdBodyEfficiencyBlock] | None:
-    """Third-body efficiencies with the collider as a species public ref."""
+    """Third-body efficiencies with the collider as a species public ref.
+
+    The ORM relationship has no ``order_by``, so the emitted blocks are sorted
+    by ``collider_ref`` for a deterministic read order across requests.
+    """
     if not kinetics.third_body_efficiencies:
         return None
-    return [
+    blocks = [
         ThirdBodyEfficiencyBlock(
             collider_ref=collider_refs[tb.collider_species_id],
             efficiency=tb.efficiency,
         )
         for tb in kinetics.third_body_efficiencies
     ]
+    blocks.sort(key=lambda b: b.collider_ref)
+    return blocks
 
 
 def _software_id_by_release_id(

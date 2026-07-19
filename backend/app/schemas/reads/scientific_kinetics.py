@@ -132,8 +132,12 @@ class ChebyshevBlock(BaseModel):
 
     Mirrors the ``kinetics_chebyshev`` ORM child: the T/P validity domain and
     the ``n_temperature`` x ``n_pressure`` coefficient matrix (list of rows).
-    ``stores_log10_k`` is included for shape parity with the network Chebyshev
-    read; the reaction-level ORM does not record it, so it is always ``None``.
+
+    Log basis: the coefficients follow the CHEMKIN base-10 convention — the
+    surface expands ``log10 k`` in the Chebyshev basis over reduced T/P. This
+    matches how they are stored and how ``chemkin_serialize.py`` re-emits them
+    into the ``CHEB`` card, so a consumer reconstructing k must exponentiate
+    base-10 (``k = 10 ** value``).
     """
 
     n_temperature: int
@@ -143,7 +147,6 @@ class ChebyshevBlock(BaseModel):
     pmin_bar: float | None = None
     pmax_bar: float | None = None
     coefficients: list[list[float]]
-    stores_log10_k: bool | None = None
 
 
 class FalloffBlock(BaseModel):

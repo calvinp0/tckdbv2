@@ -8276,7 +8276,7 @@
         "type": "object"
       },
       "ChebyshevBlock": {
-        "description": "Chebyshev-polynomial k(T,P) surface (DR-0032 Part C).\n\nMirrors the ``kinetics_chebyshev`` ORM child: the T/P validity domain and\nthe ``n_temperature`` x ``n_pressure`` coefficient matrix (list of rows).\n``stores_log10_k`` is included for shape parity with the network Chebyshev\nread; the reaction-level ORM does not record it, so it is always ``None``.",
+        "description": "Chebyshev-polynomial k(T,P) surface (DR-0032 Part C).\n\nMirrors the ``kinetics_chebyshev`` ORM child: the T/P validity domain and\nthe ``n_temperature`` x ``n_pressure`` coefficient matrix (list of rows).\n\nLog basis: the coefficients follow the CHEMKIN base-10 convention — the\nsurface expands ``log10 k`` in the Chebyshev basis over reduced T/P. This\nmatches how they are stored and how ``chemkin_serialize.py`` re-emits them\ninto the ``CHEB`` card, so a consumer reconstructing k must exponentiate\nbase-10 (``k = 10 ** value``).",
         "properties": {
           "coefficients": {
             "items": {
@@ -8317,17 +8317,6 @@
               }
             ],
             "title": "Pmin Bar"
-          },
-          "stores_log10_k": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Stores Log10 K"
           },
           "tmax_k": {
             "anyOf": [

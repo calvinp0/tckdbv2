@@ -606,7 +606,7 @@ def test_chebyshev_kinetics_surfaces_matrix_and_bounds(db_session):
     assert cb.pmin_bar == 0.01
     assert cb.pmax_bar == 100.0
     assert cb.coefficients == coeffs
-    assert cb.stores_log10_k is None
+    assert not hasattr(cb, "stores_log10_k")
     assert rec.plog_entries is None
     assert rec.falloff is None
 
@@ -697,6 +697,49 @@ def test_simple_third_body_flag_and_efficiencies(db_session):
     assert rec.third_body_efficiencies[0].efficiency == 0.7
     assert rec.falloff is None
     assert rec.plog_entries is None
+
+
+def test_third_body_efficiencies_order_is_deterministic_by_collider_ref(db_session):
+    from app.db.models.common import ArrheniusAUnits
+    from tests.services.scientific_read._factories import (
+        attach_kinetics_third_body_efficiency,
+        make_species,
+    )
+
+    entry = _setup_entry(db_session)
+    k = make_kinetics(
+        db_session,
+        reaction_entry=entry,
+        model_kind=KineticsModelKind.modified_arrhenius,
+        a=1.0e15,
+        a_units=ArrheniusAUnits.cm6_mol2_s,
+    )
+    k.is_third_body = True
+    db_session.flush()
+
+    # Attach several colliders; insertion order is intentionally not sorted.
+    c_water = make_species(db_session, smiles="O", inchi_key=next_inchi_key("KTW"))
+    c_ar = make_species(db_session, smiles="[Ar]", inchi_key=next_inchi_key("KTA"))
+    c_co2 = make_species(db_session, smiles="O=C=O", inchi_key=next_inchi_key("KTC"))
+    attach_kinetics_third_body_efficiency(
+        db_session, kinetics=k, collider_species=c_water, efficiency=6.0
+    )
+    attach_kinetics_third_body_efficiency(
+        db_session, kinetics=k, collider_species=c_ar, efficiency=0.7
+    )
+    attach_kinetics_third_body_efficiency(
+        db_session, kinetics=k, collider_species=c_co2, efficiency=2.0
+    )
+
+    response = get_reaction_kinetics(
+        db_session, reaction_entry_id=entry.id, request=KineticsReadRequest()
+    )
+    tbe = response.records[0].third_body_efficiencies
+    assert tbe is not None
+    refs = [b.collider_ref for b in tbe]
+    # Order is stable and sorted by collider_ref regardless of insertion order.
+    assert refs == sorted(refs)
+    assert set(refs) == {c_water.public_ref, c_ar.public_ref, c_co2.public_ref}
 
 
 def test_plain_modified_arrhenius_has_null_pdep_blocks(db_session):
