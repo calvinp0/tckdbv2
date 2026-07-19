@@ -513,10 +513,12 @@ def select_candidate_ids(
     return chosen, {i: badges[i].status for i in chosen}
 
 
-#: Stored ``thermo.model_kind`` → export ``model_kind`` vocab. Mirrors the
-#: read service (``scientific_read/thermo.py``): the stored column wins when
-#: present. The export vocab keeps the legacy "nasa"/"points"/"scalar" tokens
-#: and adds "nasa9"/"wilhoit".
+#: Stored ``thermo.model_kind`` → export ``model_kind`` vocab. Like the read
+#: service (``scientific_read/thermo.py``) the stored column wins when present;
+#: the legacy-NULL fallback in ``_classify_export_kind`` is a local fit-first
+#: order that differs cosmetically from the read service's derivation but is
+#: equivalent under the one-fit-per-record upload invariant. The export vocab
+#: keeps the legacy "nasa"/"points"/"scalar" tokens and adds "nasa9"/"wilhoit".
 _STORED_KIND_TO_EXPORT: dict[ThermoModelKind, str] = {
     ThermoModelKind.nasa7: "nasa",
     ThermoModelKind.nasa9: "nasa9",
