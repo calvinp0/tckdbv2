@@ -398,6 +398,86 @@ def test_simple_third_body_without_efficiencies_still_bare_M_and_loads():
 
 
 # ---------------------------------------------------------------------------
+# Bug A x Bug B — multi_arrhenius that is ALSO a third-body reaction. The
+# efficiency line must ride EVERY per-term block, or the deposited colliders
+# silently vanish (Cantera loads it as three-body with default =1.0 effs).
+# ---------------------------------------------------------------------------
+
+
+def test_multi_arrhenius_third_body_efficiencies_on_every_term():
+    sp = _third_body_species()
+    k = _kinetics(
+        model_kind=KineticsModelKind.multi_arrhenius,
+        is_third_body=True,
+        arrhenius_entries=[
+            _arr_entry(1, 1.0e18, -1.0, 0.0),
+            _arr_entry(2, 5.0e17, -1.0, 0.0),
+        ],
+        third_body_efficiencies=[
+            SimpleNamespace(collider_species_id=4, efficiency=6.0),
+            SimpleNamespace(collider_species_id=5, efficiency=0.7),
+        ],
+    )
+    rxn = _reaction(["H-e", "O2-e"], ["HO2-e"], k, ref="R1")
+    export, _ = _serialize(sp, [rxn])
+    body = _reaction_lines(export.files["chem.inp"])
+
+    main_lines = [ln for ln in body if "<=>" in ln]
+    eff_lines = [ln for ln in body if "H2O1/6/" in ln and "Ar1/0.7/" in ln]
+    dup_lines = [ln for ln in body if ln.strip() == "DUPLICATE"]
+    # Each of the two terms: bare +M main line + its own efficiency line + DUP.
+    assert len(main_lines) == 2
+    assert all(m.startswith("H1 + O2 + M <=> H1O2 + M") for m in main_lines)
+    assert all("(+M)" not in m for m in main_lines)
+    assert len(eff_lines) == 2
+    assert len(dup_lines) == 2
+
+    validate_chemkin_mechanism(export.files)
+    ct = pytest.importorskip("cantera")
+    with tempfile.TemporaryDirectory() as tmp:
+        for name, content in export.files.items():
+            with open(os.path.join(tmp, name), "w") as fh:
+                fh.write(content)
+        from cantera import ck2yaml
+
+        out = os.path.join(tmp, "mech.yaml")
+        ck2yaml.convert(
+            input_file=os.path.join(tmp, "chem.inp"),
+            thermo_file=os.path.join(tmp, "therm.dat"),
+            out_name=out,
+            quiet=True,
+            permissive=False,
+        )
+        gas = ct.Solution(out)
+        assert gas.n_reactions == 2  # duplicate pair
+        for rxn_obj in gas.reactions():
+            assert "three-body" in rxn_obj.reaction_type
+            assert rxn_obj.third_body is not None
+            # The deposited colliders survive — NOT an empty default dict.
+            assert rxn_obj.third_body.efficiencies == pytest.approx(
+                {"H2O1": 6.0, "Ar1": 0.7}
+            )
+
+
+def test_multi_arrhenius_with_no_terms_records_gap_not_silent_drop():
+    """A degenerate multi_arrhenius (0 entries, only reachable as a raw DB row —
+    the upload validator requires >=2) degrades to an ExportGap instead of being
+    silently omitted from chem.inp."""
+    H = _species(1, "[H]", "H")
+    O2 = _species(2, "[O][O]", "O2")
+    HO2 = _species(3, "[O]O", "HO2")
+    k = _kinetics(model_kind=KineticsModelKind.multi_arrhenius, arrhenius_entries=[])
+    rxn = _reaction(["H-e", "O2-e"], ["HO2-e"], k, ref="R1")
+    export, _ = _serialize([H, O2, HO2], [rxn])
+
+    assert _reaction_lines(export.files["chem.inp"]) == []
+    gap = next(
+        g for g in export.gaps if g.kind == "kinetics" and g.ref == "R1-e"
+    )
+    assert "no Arrhenius terms" in gap.detail
+
+
+# ---------------------------------------------------------------------------
 # Regression — single-block forms must serialize identically and load.
 # ---------------------------------------------------------------------------
 

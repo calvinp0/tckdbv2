@@ -351,6 +351,18 @@ def _reaction_equation(
     return f"{lhs} {arrow} {rhs}"
 
 
+def _efficiency_line(k, collider_names: dict[int, str]) -> str | None:
+    """The ``<collider>/eff/ ...`` third-body efficiency line for a kinetics
+    record, or ``None`` when the record carries no explicit efficiencies."""
+    if not k.third_body_efficiencies:
+        return None
+    effs = " ".join(
+        f"{collider_names.get(tb.collider_species_id, str(tb.collider_species_id))}/{tb.efficiency:.3G}/"
+        for tb in k.third_body_efficiencies
+    )
+    return f"    {effs}" if effs else None
+
+
 def _kinetics_lines(
     rr: ReactionExportRecord,
     sk: SelectedKinetics,
@@ -396,7 +408,12 @@ def _kinetics_lines(
         # Sum-of-Arrhenius: the scalar a/n/ea are NULL by design; the terms live
         # in ``arrhenius_entries``. Emit one Arrhenius main-line block per term
         # (ordered by entry_index via the relationship's order_by). Each becomes
-        # its own DUPLICATE-marked CHEMKIN reaction in the assembly loop.
+        # its own DUPLICATE-marked CHEMKIN reaction in the assembly loop. CHEMKIN
+        # attaches auxiliary data per (duplicate) reaction, so when the record is
+        # also a third-body reaction its efficiency line rides on EVERY term
+        # block — otherwise the deposited colliders silently vanish and Cantera
+        # loads the reaction with default (=1.0) efficiencies.
+        eff_line = _efficiency_line(k, collider_names) if has_third_body else None
         blocks: list[list[str]] = []
         for entry in k.arrhenius_entries:
             a = _a_to_mol_cm_s(entry.a, entry.a_units or k.a_units)
@@ -404,7 +421,10 @@ def _kinetics_lines(
             ea = _convert_ea(entry.ea_kj_mol, options.energy_units)
             a_str = f"{a:.4E}" if a is not None else "0.0"
             ea_str = f"{ea:.4f}" if ea is not None else "0.0"
-            blocks.append([f"{eq}   {a_str} {n:.3f} {ea_str}"])
+            block = [f"{eq}   {a_str} {n:.3f} {ea_str}"]
+            if eff_line is not None:
+                block.append(eff_line)
+            blocks.append(block)
         return blocks
 
     if is_chebyshev:
@@ -449,13 +469,10 @@ def _kinetics_lines(
                 + " /"
             )
 
-    if has_third_body and k.third_body_efficiencies:
-        effs = " ".join(
-            f"{collider_names.get(tb.collider_species_id, str(tb.collider_species_id))}/{tb.efficiency:.3G}/"
-            for tb in k.third_body_efficiencies
-        )
-        if effs:
-            lines.append(f"    {effs}")
+    if has_third_body:
+        eff_line = _efficiency_line(k, collider_names)
+        if eff_line is not None:
+            lines.append(eff_line)
 
     if k.model_kind is KineticsModelKind.plog and k.plog_entries:
         for pe in k.plog_entries:
@@ -574,6 +591,19 @@ def _build_chem_inp(
     for rr in emitted:
         sk = rr.kinetics[0]
         blocks = _kinetics_lines(rr, sk, names_by_ref, collider_names, options)
+        if not blocks:
+            # The only record that yields no blocks is a ``multi_arrhenius`` with
+            # an empty ``arrhenius_entries`` set (unreachable via the API — the
+            # upload validator requires >=2 — but not enforced by a DB CHECK).
+            # Degrade to a gap rather than silently dropping the reaction.
+            gaps.append(
+                ExportGap(
+                    kind="kinetics",
+                    ref=rr.reaction_entry.public_ref,
+                    detail="multi_arrhenius kinetics has no Arrhenius terms",
+                )
+            )
+            continue
         record_blocks.append((rr, blocks))
         dup_counts[_dup_key(rr)] += len(blocks)
 
