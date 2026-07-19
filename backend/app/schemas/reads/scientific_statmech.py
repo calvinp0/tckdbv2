@@ -264,6 +264,7 @@ class AvailableStatmechSections(BaseModel):
 
     has_source_calculations: bool
     has_torsions: bool
+    has_electronic_levels: bool
     has_frequencies: bool
     has_conformers: bool
     has_review: bool

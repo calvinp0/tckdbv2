@@ -111,7 +111,6 @@ _DETAIL_LEGAL_INCLUDE_TOKENS: set[str] = _LEGAL_INCLUDE_TOKENS | {"trust"}
 _TRUST_EAGER_LOADS = (
     selectinload(Statmech.species_entry),
     selectinload(Statmech.frequency_scale_factor),
-    selectinload(Statmech.electronic_levels),
     selectinload(Statmech.torsions).selectinload(StatmechTorsion.coordinates),
     selectinload(Statmech.torsions)
     .selectinload(StatmechTorsion.source_scan_calculation)
@@ -189,8 +188,9 @@ def get_statmech(
     context + optional frequency-scale-factor / software / workflow /
     literature provenance pointers + bounded evidence and
     available_sections summaries. Heavy include blocks
-    (``source_calculations`` / ``torsions`` / ``frequencies`` /
-    ``conformers`` / ``review``) populate only when the caller opts in.
+    (``source_calculations`` / ``torsions`` / ``electronic_levels`` /
+    ``frequencies`` / ``conformers`` / ``review``) populate only when
+    the caller opts in.
     """
     includes = validate_includes(
         include or [],
@@ -255,6 +255,7 @@ def build_statmech_record(
 
     source_rows = _load_source_rows(session, sm.id)
     torsion_rows = _load_torsion_rows(session, sm.id)
+    electronic_level_rows = _load_electronic_level_rows(session, sm.id)
     has_conformer_context = bool(
         session.scalar(
             select(
@@ -274,6 +275,7 @@ def build_statmech_record(
     available = AvailableStatmechSections(
         has_source_calculations=bool(source_rows),
         has_torsions=bool(torsion_rows),
+        has_electronic_levels=bool(electronic_level_rows),
         has_frequencies=any(
             r.role == StatmechCalculationRole.freq for r in source_rows
         ),
@@ -313,7 +315,7 @@ def build_statmech_record(
 
     electronic_levels_block: list[StatmechElectronicLevelSummary] | None = None
     if "electronic_levels" in includes:
-        electronic_levels_block = _build_electronic_levels(session, sm.id)
+        electronic_levels_block = _build_electronic_levels(electronic_level_rows)
 
     frequencies_block: StatmechFrequenciesSummary | None = None
     if "frequencies" in includes:
@@ -391,6 +393,16 @@ def _load_torsion_rows(
         select(StatmechTorsion)
         .where(StatmechTorsion.statmech_id == statmech_id)
         .order_by(StatmechTorsion.torsion_index.asc())
+    ).all()
+
+
+def _load_electronic_level_rows(
+    session: Session, statmech_id: int
+) -> list[StatmechElectronicLevel]:
+    return session.scalars(
+        select(StatmechElectronicLevel)
+        .where(StatmechElectronicLevel.statmech_id == statmech_id)
+        .order_by(StatmechElectronicLevel.level_index.asc())
     ).all()
 
 
@@ -810,13 +822,8 @@ def _build_torsions(
 
 
 def _build_electronic_levels(
-    session: Session, statmech_id: int
+    rows: list[StatmechElectronicLevel],
 ) -> list[StatmechElectronicLevelSummary]:
-    rows = session.scalars(
-        select(StatmechElectronicLevel)
-        .where(StatmechElectronicLevel.statmech_id == statmech_id)
-        .order_by(StatmechElectronicLevel.level_index.asc())
-    ).all()
     return [
         StatmechElectronicLevelSummary(
             level_index=r.level_index,

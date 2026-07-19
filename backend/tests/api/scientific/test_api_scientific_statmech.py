@@ -260,6 +260,7 @@ def test_detail_available_sections_present(client, db_session):
     for key in (
         "has_source_calculations",
         "has_torsions",
+        "has_electronic_levels",
         "has_frequencies",
         "has_conformers",
         "has_review",
@@ -311,11 +312,13 @@ def test_detail_include_electronic_levels(client, db_session):
     electronic states (DR-0033 q_elec) that are otherwise written but
     unreadable. OH-like: ground ²Π + spin-orbit-split excited state."""
     _, _, sm = _make_statmech(db_session)
-    attach_statmech_electronic_level(
-        db_session, statmech=sm, level_index=1, energy_cm1=0.0, degeneracy=2
-    )
+    # Insert the excited state FIRST (out of level_index order) so the
+    # ordering assertion below actually guards ``ORDER BY level_index``.
     attach_statmech_electronic_level(
         db_session, statmech=sm, level_index=2, energy_cm1=126.0, degeneracy=2
+    )
+    attach_statmech_electronic_level(
+        db_session, statmech=sm, level_index=1, energy_cm1=0.0, degeneracy=2
     )
     body = client.get(
         _detail_url(sm.public_ref, include="electronic_levels")
@@ -367,6 +370,19 @@ def test_detail_include_electronic_levels_empty_when_none_present(
         _detail_url(sm.public_ref, include="electronic_levels")
     ).json()
     assert body["record"]["electronic_levels"] == []
+
+
+def test_detail_available_sections_flags_electronic_levels(client, db_session):
+    """``has_electronic_levels`` is False without levels and True once the
+    statmech carries them — section discovery independent of the include."""
+    _, _, sm = _make_statmech(db_session)
+    before = client.get(_detail_url(sm.public_ref)).json()
+    assert before["record"]["available_sections"]["has_electronic_levels"] is False
+    attach_statmech_electronic_level(
+        db_session, statmech=sm, level_index=1, energy_cm1=0.0, degeneracy=2
+    )
+    after = client.get(_detail_url(sm.public_ref)).json()
+    assert after["record"]["available_sections"]["has_electronic_levels"] is True
 
 
 def test_detail_include_frequencies_points_at_source_freq_calcs(
