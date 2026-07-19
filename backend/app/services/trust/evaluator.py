@@ -188,6 +188,13 @@ def _thermo_has_representation(thermo: Thermo) -> bool:
     )
 
 
+# Upper sanity bound for thermochemical temperature ranges (NASA Glenn maximum,
+# 20,000 K). Canonical NASA-9 fits use a 6,000-20,000 K high-temperature
+# interval; a tighter cap would hard-fail valid high-T data. Mirrors the same
+# constant in ``rubrics.py``.
+_MAX_THERMO_TEMPERATURE_K = 20_000
+
+
 def _thermo_temperature_range_invalid(thermo: Thermo) -> bool:
     """Return True when any populated thermo temperature range is invalid.
 
@@ -198,11 +205,13 @@ def _thermo_temperature_range_invalid(thermo: Thermo) -> bool:
     if thermo.tmin_k is not None or thermo.tmax_k is not None:
         if thermo.tmin_k is None or thermo.tmax_k is None:
             return True
-        if not (0 < thermo.tmin_k < thermo.tmax_k <= 10_000):
+        if not (0 < thermo.tmin_k < thermo.tmax_k <= _MAX_THERMO_TEMPERATURE_K):
             return True
 
     for interval in thermo.nasa9_intervals:
-        if not (0 < interval.t_min_k < interval.t_max_k <= 10_000):
+        if not (
+            0 < interval.t_min_k < interval.t_max_k <= _MAX_THERMO_TEMPERATURE_K
+        ):
             return True
 
     nasa = thermo.nasa
@@ -212,7 +221,9 @@ def _thermo_temperature_range_invalid(thermo: Thermo) -> bool:
         return False
     if nasa.t_low is None or nasa.t_mid is None or nasa.t_high is None:
         return True
-    return not (0 < nasa.t_low < nasa.t_mid < nasa.t_high <= 10_000)
+    return not (
+        0 < nasa.t_low < nasa.t_mid < nasa.t_high <= _MAX_THERMO_TEMPERATURE_K
+    )
 
 
 def _detect_thermo_hard_fail(thermo: Thermo) -> Optional[HardFailReason]:

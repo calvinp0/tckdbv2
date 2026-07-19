@@ -402,6 +402,7 @@ def _make_thermo(
     scalar: bool = True,
     nasa: bool = False,
     nasa9: bool = False,
+    nasa9_high_t_max_k: float = 6000.0,
     wilhoit: bool = False,
     points: bool = False,
     temperature_range: bool = True,
@@ -468,7 +469,7 @@ def _make_thermo(
                     thermo_id=thermo.id,
                     interval_index=2,
                     t_min_k=1000.0,
-                    t_max_k=6000.0,
+                    t_max_k=nasa9_high_t_max_k,
                     a1=1.1,
                     a2=2.1,
                     a3=3.1,
@@ -1361,6 +1362,23 @@ class TestComputedThermoEvaluator:
         assert "nasa_coefficients_present" in result.not_applicable_checks
         assert "thermo_points_present" in result.not_applicable_checks
         assert result.hard_fail_reason is None
+
+    def test_nasa9_glenn_high_temperature_interval_not_hard_failed(self, db_session):
+        # Canonical NASA-9 (Gordon & McBride / NASA Glenn) fits extend to
+        # 20,000 K via the standard 6,000-20,000 K high-temperature interval.
+        # Such a valid record must NOT hard-fail the temperature-range check
+        # (regression guard for the too-tight 10,000 K envelope).
+        thermo = _make_thermo(
+            db_session,
+            scalar=False,
+            nasa9=True,
+            nasa9_high_t_max_k=20_000.0,
+            points=False,
+            temperature_range=False,
+        )
+        result = evaluate_computed_thermo(db_session, thermo.id)
+        assert result.hard_fail_reason is None
+        assert "temperature_range_valid" in result.passed_checks
 
     def test_wilhoit_only_representation_checks_pass(self, db_session):
         # Wilhoit has no intrinsic piecewise range; drive range via top-level bounds.
