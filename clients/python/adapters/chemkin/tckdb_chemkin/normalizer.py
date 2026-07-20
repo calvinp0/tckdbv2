@@ -310,6 +310,29 @@ def _duplicate_key(rxn: NormalizedReaction) -> tuple:
     )
 
 
+def _members_agree_third_body(members: list[NormalizedReaction]) -> bool:
+    """Whether every member of a DUPLICATE group shares the SAME third-body
+    context — i.e. the same ``is_third_body`` flag, the same ``falloff_collider``
+    label, and an *identical* collider-efficiency mapping.
+
+    Summing the members into one ``multi_arrhenius`` rate is only correct when
+    they describe the same reaction under the same bath-gas conditions. CHEMKIN
+    permits duplicate ``+M`` lines to carry *different* per-line efficiency
+    lists (a genuinely different effective [M]); those must NOT be fused, or the
+    non-first lines' efficiencies would be silently discarded and the stored
+    rate would be scientifically wrong.
+    """
+    first = members[0]
+    for m in members[1:]:
+        if m.is_third_body != first.is_third_body:
+            return False
+        if m.falloff_collider != first.falloff_collider:
+            return False
+        if m.efficiencies != first.efficiencies:
+            return False
+    return True
+
+
 def _merge_multi_arrhenius(
     members: list[NormalizedReaction],
 ) -> NormalizedReaction:
@@ -381,12 +404,32 @@ def _collapse_duplicates(
             out.append(val)  # type: ignore[arg-type]
             continue
         members = groups[val]  # type: ignore[index]
-        if len(members) >= 2:
-            out.append(_merge_multi_arrhenius(members))
-        else:
+        if len(members) < 2:
             # A lone DUP with no matching partner is not a valid sum; keep the
             # single line as its own (modified-)Arrhenius payload.
             out.extend(members)
+            continue
+        if not _members_agree_third_body(members):
+            # Same reactants/products/reversibility but a MISMATCHED third-body
+            # context (different is_third_body / collider / efficiency mapping).
+            # Summing would silently drop the differing bath-gas information, so
+            # pass the members through unchanged (separate scalar DUP rows, as
+            # before the multi_arrhenius collapse existed) and flag why.
+            lines = ", ".join(
+                str(m.line_no) for m in members if m.line_no is not None
+            )
+            for m in members:
+                m.warnings.append(
+                    "CHEMKIN DUPLICATE group NOT collapsed to multi_arrhenius: "
+                    "members disagree on third-body context (is_third_body / "
+                    "collider / efficiencies differ across the duplicate lines"
+                    + (f" {lines}" if lines else "")
+                    + "); kept as separate rates to avoid discarding per-line "
+                    "efficiencies."
+                )
+            out.extend(members)
+            continue
+        out.append(_merge_multi_arrhenius(members))
     return out
 
 

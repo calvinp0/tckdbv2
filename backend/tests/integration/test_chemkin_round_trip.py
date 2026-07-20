@@ -542,11 +542,6 @@ def test_multi_arrhenius_duplicate_round_trips(round_trip):
 
     # Compare terms by their (A, n) content — export orders by entry_index but
     # the round trip need only preserve the *set* of summed terms.
-    def _terms(entries):
-        return sorted(
-            (round(e.a, 4), round(e.n, 6), e.a_units) for e in entries
-        )
-
     # OH + OH is bimolecular -> every term keeps cm3_mol_s.
     assert all(e.a_units == "cm3_mol_s" for e in e_in)
     assert all(e.a_units == "cm3_mol_s" for e in e_out)
