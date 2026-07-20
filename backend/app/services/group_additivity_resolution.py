@@ -70,13 +70,14 @@ def resolve_or_create_ga_scheme(
         if ref.code_commit is not None and ref.code_commit != existing.code_commit:
             logger.warning(
                 "Group-additivity scheme (name=%r, version=%r) reused on its "
-                "(name, version) dedup key, but the uploaded code_commit differs "
-                "from the stored one; the existing row's commit is retained and "
-                "the uploaded commit is ignored. Encode estimator code / "
+                "(name, version) dedup key: existing scheme has code_commit=%s, "
+                "uploaded code_commit=%r is ignored. Encode estimator code / "
                 "group-database changes in `version` so distinct code states "
                 "resolve to distinct schemes.",
                 ref.name,
                 ref.version,
+                existing.code_commit if existing.code_commit is not None else "(none)",
+                ref.code_commit,
             )
         return existing
 
