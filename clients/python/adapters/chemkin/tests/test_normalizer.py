@@ -86,8 +86,27 @@ def test_simple_third_body_form(norm):
     assert r5.a_units == "cm6_mol2_s"
 
 
+def test_duplicate_collapses_to_multi_arrhenius(norm):
+    # The R6 DUPLICATE pair (two identical-equation Arrhenius lines) collapses
+    # into a single multi_arrhenius reaction carrying both terms (DR-0036).
+    r6 = by_index(norm, 5)
+    assert r6.model_kind == "multi_arrhenius"
+    assert r6.duplicate
+    # Scalar main-line rate is unset; the coefficients live in the terms.
+    assert r6.a is None and r6.n is None and r6.reported_ea is None
+    entries = r6.arrhenius_entries
+    assert [e.entry_index for e in entries] == [1, 2]
+    # O + OH is bimolecular -> each summed term keeps cm3_mol_s.
+    assert all(e.a_units == "cm3_mol_s" for e in entries)
+    assert sorted(e.a for e in entries) == pytest.approx([3.0e12, 1.0e13])
+    assert all(e.reported_ea_units == "cal_mol" for e in entries)
+    assert sorted(e.reported_ea for e in entries) == pytest.approx([500.0, 700.0])
+
+
 def test_rev_and_lt_warnings(norm):
-    r7 = by_index(norm, 7)
+    # R7 (the LT-unsupported reaction) is now at index 6: the R6 DUPLICATE pair
+    # collapsed two source lines into one multi_arrhenius reaction.
+    r7 = by_index(norm, 6)
     assert any("Unsupported aux" in w for w in r7.warnings)
 
 
