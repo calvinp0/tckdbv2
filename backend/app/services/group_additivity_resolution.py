@@ -7,6 +7,8 @@ Mirrors ``app.services.energy_correction_resolution``.
 
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,6 +24,8 @@ from app.schemas.workflows.group_additivity_upload import (
     GroupAdditivitySchemeRef,
 )
 from app.services.literature_resolution import resolve_or_create_literature
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_or_create_ga_scheme(
@@ -44,6 +48,8 @@ def resolve_or_create_ga_scheme(
        misrepresent the later estimate. Contributors who change the estimator
        code / group-database state **must** encode that change in ``version``
        (the dedup key) so distinct code states resolve to distinct schemes.
+       Such a mismatch on a dedup hit is now emitted as a ``logging.warning``
+       so the silently-ignored commit is observable in the logs.
 
     :param session: Active SQLAlchemy session.
     :param ref: Upload-facing scheme reference.
@@ -61,6 +67,17 @@ def resolve_or_create_ga_scheme(
         )
     )
     if existing is not None:
+        if ref.code_commit is not None and ref.code_commit != existing.code_commit:
+            logger.warning(
+                "Group-additivity scheme (name=%r, version=%r) reused on its "
+                "(name, version) dedup key, but the uploaded code_commit differs "
+                "from the stored one; the existing row's commit is retained and "
+                "the uploaded commit is ignored. Encode estimator code / "
+                "group-database changes in `version` so distinct code states "
+                "resolve to distinct schemes.",
+                ref.name,
+                ref.version,
+            )
         return existing
 
     literature = (
